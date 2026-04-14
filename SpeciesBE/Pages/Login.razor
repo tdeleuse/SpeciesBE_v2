@@ -1,0 +1,40 @@
+﻿@page "/login"
+@inject SpeciesBE.Services.AuthService AuthService
+@inject NavigationManager Nav
+
+<h3>Connexion</h3>
+
+@if (AuthService.IsAuthenticated)
+{
+    <p>Connecté en tant que <strong>@AuthService.Username</strong>.</p>
+    <button class="btn btn-outline-danger" @onclick="DoLogout">Se déconnecter</button>
+}
+else
+{
+    <div class="card p-3" style="max-width: 420px;">
+        <label class="form-label">Nom d’utilisateur</label>
+        <input class="form-control" @bind="username" placeholder="ex: alice" />
+        <button class="btn btn-primary mt-3" @onclick="DoLogin" disabled="@string.IsNullOrWhiteSpace(username)">
+            Se connecter
+        </button>
+        <div class="small text-muted mt-2">
+            Authentification simulée (stockée en LocalStorage).
+        </div>
+    </div>
+}
+
+@code {
+    private string username = "";
+
+    private async Task DoLogin()
+    {
+        await AuthService.LoginAsync(username);
+        Nav.NavigateTo("/");
+    }
+
+    private async Task DoLogout()
+    {
+        await AuthService.LogoutAsync();
+        Nav.NavigateTo("/");
+    }
+}

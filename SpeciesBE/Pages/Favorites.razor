@@ -1,0 +1,66 @@
+﻿@page "/favorites"
+@inject FavoriteService FavoriteService
+@inject AuthService AuthService
+
+<h3>Mes espèces favorites</h3>
+
+@if (!AuthService.IsAuthenticated)
+{
+    <div class="alert alert-warning">
+        Tu dois être connecté pour voir et gérer tes favoris.
+        <a class="ms-2" href="/login">Aller à la connexion</a>
+    </div>
+    return;
+}
+
+@if (favorites is null)
+{
+    <p>Chargement...</p>
+}
+else if (!favorites.Any())
+{
+    <p>Aucun favori pour le moment.</p>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var fav in favorites)
+        {
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card p-3 h-100">
+                    <h6 class="mb-1">@fav.ScientificName</h6>
+                    <div class="small text-muted mb-2">Ajouté le @fav.DateAdded.ToShortDateString()</div>
+
+                    <label class="form-label">Notes</label>
+                    <input class="form-control" @bind="fav.Notes" placeholder="Notes personnelles..." />
+
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-success btn-sm" @onclick="() => Save(fav)">Enregistrer</button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Remove(fav.Id)">Supprimer</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<FavoriteSpecies>? favorites;
+
+    protected override async Task OnInitializedAsync()
+    {
+        favorites = await FavoriteService.GetFavorites();
+    }
+
+    private async Task Save(FavoriteSpecies fav)
+    {
+        await FavoriteService.UpdateFavorite(fav);
+        favorites = await FavoriteService.GetFavorites();
+    }
+
+    private async Task Remove(int id)
+    {
+        await FavoriteService.RemoveFavorite(id);
+        favorites = await FavoriteService.GetFavorites();
+    }
+}

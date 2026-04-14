@@ -1,0 +1,58 @@
+﻿@page "/taxon/{TaxonId:int}"
+@inject SpeciesApiService Api
+
+<h3>Détails</h3>
+
+@if (details is null)
+{
+    <p>Chargement...</p>
+}
+else
+{
+    <div class="card p-3">
+        <h5>@(details.CommonName ?? details.ScientificName)</h5>
+        <div class="text-muted"><em>@details.ScientificName</em></div>
+
+        @if (!string.IsNullOrWhiteSpace(details.PhotoUrl))
+        {
+            <img src="@details.PhotoUrl" style="max-width:420px; object-fit:cover;" class="mt-3" />
+        }
+
+        @if (!string.IsNullOrWhiteSpace(details.WikipediaSummary))
+        {
+            <h6 class="mt-4">Description</h6>
+            <p>@details.WikipediaSummary</p>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(details.WikipediaUrl))
+        {
+            <p class="small">
+                Source : <a href="@details.WikipediaUrl" target="_blank">Wikipedia</a>
+            </p>
+        }
+
+        @if (taxonomy is not null && taxonomy.Any())
+        {
+            <h6 class="mt-4">Taxonomie</h6>
+            <ul>
+                @foreach (var t in taxonomy)
+                {
+                    <li><strong>@t.Rank</strong> : @(t.CommonName ?? t.ScientificName)</li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public int TaxonId { get; set; }
+
+    private SpeciesBE.Models.SpeciesDetailsModel? details;
+    private List<SpeciesBE.Models.TaxonOption>? taxonomy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        details = await Api.GetTaxonDetails(TaxonId, locale: "fr");
+        taxonomy = await Api.GetTaxonomy(TaxonId, locale: "fr");
+    }
+}

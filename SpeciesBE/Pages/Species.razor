@@ -1,0 +1,397 @@
+﻿@page "/species"
+@inject SpeciesApiService SpeciesApiService
+@inject FavoriteService FavoriteService
+@inject AuthService AuthService
+
+<h3>Recherche d'espèces (iNaturalist)</h3>
+
+<div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" role="switch" @bind="taxonomyMode" />
+    <label class="form-check-label">Mode exploration taxonomique</label>
+</div>
+
+@if (!taxonomyMode)
+{
+    <!-- MODE 1 : Recherche texte -->
+    <div class="card p-3 mb-3">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-8">
+                <input class="form-control"
+                       @bind="query"
+                       @bind:event="oninput"
+                       placeholder="Ex: renard, rouge-gorge, quercus..." />
+            </div>
+            <div class="col-md-4 d-flex gap-2">
+                <button class="btn btn-primary w-100" @onclick="SearchText" disabled="@isLoading">
+                    Rechercher
+                </button>
+                <button class="btn btn-outline-secondary" @onclick="ClearAll" disabled="@isLoading">
+                    Effacer
+                </button>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <!-- MODE 2 : Exploration taxonomique -->
+    <div class="card p-3 mb-3">
+        <div class="row g-2">
+
+            <div class="col-md-4">
+                <label class="form-label">Règne</label>
+                <select class="form-select" @onchange="OnKingdomChanged">
+                    <option value="">-- Choisir --</option>
+                    @foreach (var k in kingdoms)
+                    {
+                        <option value="@k.Id">@Display(k)</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Embranchement</label>
+                <select class="form-select" @onchange="OnPhylumChanged" disabled="@(phyla.Count == 0)">
+                    <option value="">-- Choisir --</option>
+                    @foreach (var p in phyla)
+                    {
+                        <option value="@p.Id">@Display(p)</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Classe</label>
+                <select class="form-select" @onchange="OnClassChanged" disabled="@(classes.Count == 0)">
+                    <option value="">-- Choisir --</option>
+                    @foreach (var c in classes)
+                    {
+                        <option value="@c.Id">@Display(c)</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Ordre</label>
+                <select class="form-select" @onchange="OnOrderChanged" disabled="@(orders.Count == 0)">
+                    <option value="">-- Choisir --</option>
+                    @foreach (var o in orders)
+                    {
+                        <option value="@o.Id">@Display(o)</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Famille</label>
+                <select class="form-select" @onchange="OnFamilyChanged" disabled="@(families.Count == 0)">
+                    <option value="">-- Choisir --</option>
+                    @foreach (var f in families)
+                    {
+                        <option value="@f.Id">@Display(f)</option>
+                    }
+                </select>
+            </div>
+
+            <div class="col-md-4">
+                <label class="form-label">Genre</label>
+                <select class="form-select" @onchange="OnGenusChanged" disabled="@(genera.Count == 0)">
+                    <option value="">-- Choisir --</option>
+                    @foreach (var g in genera)
+                    {
+                        <option value="@g.Id">@Display(g)</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <div class="mt-3 d-flex gap-2">
+            <button class="btn btn-outline-secondary" @onclick="ClearTaxonomy" disabled="@isLoading">
+                Réinitialiser l'arbre
+            </button>
+        </div>
+
+        <div class="mt-2 small text-muted">
+            Dès que tu sélectionnes un <strong>genre</strong>, la liste d’espèces (avec photos) se charge automatiquement.
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(error))
+{
+    <div class="alert alert-danger">@error</div>
+}
+
+@if (isLoading)
+{
+    <div class="alert alert-info">Chargement...</div>
+}
+
+@if (results is not null && results.Any())
+{
+    <div class="row g-3">
+        @foreach (var s in results)
+        {
+            <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
+                <div class="card h-100 shadow-sm">
+                    @if (!string.IsNullOrWhiteSpace(s.PhotoUrl))
+                    {
+                        <img src="@s.PhotoUrl" class="card-img-top" style="object-fit:cover; height:180px;" />
+                    }
+                    else
+                    {
+                        <div class="d-flex align-items-center justify-content-center bg-light" style="height:180px;">
+                            <span class="text-muted">Pas de photo</span>
+                        </div>
+                    }
+
+                    <div class="card-body">
+                        <div class="small text-muted">@s.Rank</div>
+
+                        <h6 class="card-title mb-1">
+                            @(string.IsNullOrWhiteSpace(s.CommonName) ? s.ScientificName : s.CommonName)
+                        </h6>
+
+                        <div class="text-muted small">
+                            <em>@s.ScientificName</em>
+                        </div>
+
+                        <div class="mt-3 d-flex gap-2">
+                            <button class="btn btn-warning btn-sm"
+                                    @onclick="() => AddToFavorites(s)"
+                                    disabled="@(!AuthService.IsAuthenticated || IsAlreadyFavorite(s.Id))">
+                                @(!AuthService.IsAuthenticated ? "Connecte-toi ⭐" : IsAlreadyFavorite(s.Id) ? "Déjà ⭐" : "Favori ⭐")
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else if (hasSearched && !isLoading)
+{
+    <div class="alert alert-secondary">Aucun résultat.</div>
+}
+
+@code {
+    // --- Recherche / affichage ---
+    private string query = "";
+    private bool isLoading;
+    private bool hasSearched;
+    private string? error;
+
+    private List<SpeciesBE.Models.Species>? results;
+    private List<SpeciesBE.Models.FavoriteSpecies> favoritesCache = new();
+
+    // --- Mode taxonomie ---
+    private bool taxonomyMode = false;
+
+    private List<TaxonOption> kingdoms = new();
+    private List<TaxonOption> phyla = new();
+    private List<TaxonOption> classes = new();
+    private List<TaxonOption> orders = new();
+    private List<TaxonOption> families = new();
+    private List<TaxonOption> genera = new();
+
+    private int? selectedKingdomId;
+    private int? selectedPhylumId;
+    private int? selectedClassId;
+    private int? selectedOrderId;
+    private int? selectedFamilyId;
+    private int? selectedGenusId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        favoritesCache = await FavoriteService.GetFavorites();
+        kingdoms = await SpeciesApiService.GetTaxa(rank: "kingdom", perPage: 200);
+    }
+
+    private string Display(TaxonOption t)
+        => !string.IsNullOrWhiteSpace(t.CommonName)
+            ? $"{t.CommonName} — {t.ScientificName}"
+            : (t.ScientificName ?? $"#{t.Id}");
+
+    private int? TryParseId(object? value)
+        => int.TryParse(value?.ToString(), out var id) ? id : null;
+
+    // --- Recherche texte ---
+    private async Task SearchText()
+    {
+        error = null;
+        isLoading = true;
+        hasSearched = true;
+
+        try
+        {
+            results = await SpeciesApiService.SearchSpecies(query, limit: 24);
+            favoritesCache = await FavoriteService.GetFavorites();
+        }
+        catch (Exception ex)
+        {
+            error = $"Erreur iNaturalist : {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ClearAll()
+    {
+        query = "";
+        results = null;
+        hasSearched = false;
+        error = null;
+    }
+
+    // --- Cascade + auto-load species quand genus est choisi ---
+    private async Task OnKingdomChanged(ChangeEventArgs e)
+    {
+        selectedKingdomId = TryParseId(e.Value);
+        ResetBelow("kingdom");
+        ClearResults();
+
+        if (selectedKingdomId is null) return;
+        phyla = await SpeciesApiService.GetTaxa(rank: "phylum", parentId: selectedKingdomId);
+    }
+
+    private async Task OnPhylumChanged(ChangeEventArgs e)
+    {
+        selectedPhylumId = TryParseId(e.Value);
+        ResetBelow("phylum");
+        ClearResults();
+
+        if (selectedPhylumId is null) return;
+        classes = await SpeciesApiService.GetTaxa(rank: "class", parentId: selectedPhylumId);
+    }
+
+    private async Task OnClassChanged(ChangeEventArgs e)
+    {
+        selectedClassId = TryParseId(e.Value);
+        ResetBelow("class");
+        ClearResults();
+
+        if (selectedClassId is null) return;
+        orders = await SpeciesApiService.GetTaxa(rank: "order", parentId: selectedClassId);
+    }
+
+    private async Task OnOrderChanged(ChangeEventArgs e)
+    {
+        selectedOrderId = TryParseId(e.Value);
+        ResetBelow("order");
+        ClearResults();
+
+        if (selectedOrderId is null) return;
+        families = await SpeciesApiService.GetTaxa(rank: "family", parentId: selectedOrderId);
+    }
+
+    private async Task OnFamilyChanged(ChangeEventArgs e)
+    {
+        selectedFamilyId = TryParseId(e.Value);
+        ResetBelow("family");
+        ClearResults();
+
+        if (selectedFamilyId is null) return;
+        genera = await SpeciesApiService.GetTaxa(rank: "genus", parentId: selectedFamilyId);
+    }
+
+    private async Task OnGenusChanged(ChangeEventArgs e)
+    {
+        selectedGenusId = TryParseId(e.Value);
+        ClearResults();
+
+        if (selectedGenusId is null) return;
+
+        // Auto charger les espèces sous le genre choisi
+        await LoadSpeciesUnderGenus(selectedGenusId.Value);
+    }
+
+    private async Task LoadSpeciesUnderGenus(int genusId)
+    {
+        error = null;
+        isLoading = true;
+        hasSearched = true;
+
+        try
+        {
+            results = await SpeciesApiService.GetSpeciesByParent(genusId, limit: 24);
+            favoritesCache = await FavoriteService.GetFavorites();
+        }
+        catch (Exception ex)
+        {
+            error = $"Erreur iNaturalist : {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ClearResults()
+    {
+        results = null;
+        hasSearched = false;
+        error = null;
+    }
+
+    private void ClearTaxonomy()
+    {
+        selectedKingdomId = selectedPhylumId = selectedClassId = selectedOrderId = selectedFamilyId = selectedGenusId = null;
+        phyla.Clear(); classes.Clear(); orders.Clear(); families.Clear(); genera.Clear();
+        ClearResults();
+    }
+
+    private void ResetBelow(string level)
+    {
+        if (level == "kingdom")
+        {
+            selectedPhylumId = selectedClassId = selectedOrderId = selectedFamilyId = selectedGenusId = null;
+            phyla.Clear(); classes.Clear(); orders.Clear(); families.Clear(); genera.Clear();
+        }
+        else if (level == "phylum")
+        {
+            selectedClassId = selectedOrderId = selectedFamilyId = selectedGenusId = null;
+            classes.Clear(); orders.Clear(); families.Clear(); genera.Clear();
+        }
+        else if (level == "class")
+        {
+            selectedOrderId = selectedFamilyId = selectedGenusId = null;
+            orders.Clear(); families.Clear(); genera.Clear();
+        }
+        else if (level == "order")
+        {
+            selectedFamilyId = selectedGenusId = null;
+            families.Clear(); genera.Clear();
+        }
+        else if (level == "family")
+        {
+            selectedGenusId = null;
+            genera.Clear();
+        }
+    }
+
+    // --- Favoris ---
+    private bool IsAlreadyFavorite(int taxonId)
+        => favoritesCache.Any(f => f.SpeciesKey == taxonId);
+
+    private async Task AddToFavorites(SpeciesBE.Models.Species s)
+    {
+        if (!AuthService.IsAuthenticated || IsAlreadyFavorite(s.Id))
+            return;
+
+        var fav = new SpeciesBE.Models.FavoriteSpecies
+        {
+            Id = GenerateId(),
+            SpeciesKey = s.Id,
+            ScientificName = s.ScientificName,
+            Notes = ""
+        };
+
+        await FavoriteService.AddFavorite(fav);
+        favoritesCache = await FavoriteService.GetFavorites();
+    }
+
+    private int GenerateId()
+        => (favoritesCache.Any() ? favoritesCache.Max(f => f.Id) : 0) + 1;
+}
