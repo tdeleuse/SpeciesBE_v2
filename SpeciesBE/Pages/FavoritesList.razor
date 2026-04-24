@@ -1,5 +1,6 @@
 ﻿@inject FavoriteService FavoriteService
 @inject AuthService AuthService
+@inject SpeciesApiService SpeciesApiService
 
 @if (!AuthService.IsAuthenticated)
 {
@@ -30,24 +31,137 @@ else
         @foreach (var fav in favorites)
         {
             <div class="col-12 col-md-6 col-lg-4">
-                <div class="card p-3 h-100">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
+                <div class="card p-3 h-100" style="cursor:pointer;"
+                     @onclick="() => OpenModal(fav.SpeciesKey)">
+
+                    @* EN-TÊTE *@
+                    <div class="d-flex justify-content-between align-items-start mb-3">
                         <div>
                             <h6 class="mb-0 fw-bold" style="color:var(--green-dark);">@fav.ScientificName</h6>
                             <small class="text-muted">Ajouté le @fav.DateAdded.ToShortDateString()</small>
                         </div>
-                        <span style="font-size:1.5rem;">🌿</span>
+                        <div class="d-flex gap-2 align-items-center">
+                            <span style="font-size:1.3rem;">🌿</span>
+                            <button class="btn btn-outline-danger btn-sm"
+                                    @onclick:stopPropagation="true"
+                                    @onclick="() => Remove(fav.Id)"
+                                    title="Supprimer ce favori">
+                                🗑
+                            </button>
+                        </div>
                     </div>
-                    <label class="form-label fw-bold small" style="color:var(--green-main);">Notes personnelles</label>
-                    <input class="form-control form-control-sm" @bind="fav.Notes" placeholder="Ajoute une note..." />
-                    <div class="d-flex gap-2 mt-3">
-                        <button class="btn btn-primary btn-sm flex-grow-1" @onclick="() => Save(fav)">
-                            Enregistrer
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Remove(fav.Id)">
-                            🗑
+
+                    @* NOTES EXISTANTES *@
+                    @if (fav.Notes.Any())
+                    {
+                        <div class="mb-3" @onclick:stopPropagation="true">
+                            @foreach (var note in fav.Notes.OrderByDescending(n => n.DateAdded))
+                            {
+                                <div class="d-flex align-items-start gap-2 mb-2 p-2 rounded"
+                                     style="background:var(--green-cream); border-left: 3px solid var(--green-mid);">
+                                    <div class="flex-grow-1">
+                                        <div class="small" style="color:var(--text-dark);">@note.Text</div>
+                                        <div class="text-muted" style="font-size:0.7rem;">
+                                            @note.DateAdded.ToString("dd/MM/yyyy HH:mm")
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-sm p-0 text-danger" style="line-height:1;"
+                                            @onclick="() => RemoveNote(fav, note.Id)"
+                                            title="Supprimer cette note">
+                                        ✕
+                                    </button>
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @* AJOUTER UNE NOTE *@
+                    <div class="mt-auto" @onclick:stopPropagation="true">
+                        <label class="form-label fw-bold small" style="color:var(--green-main);">
+                            Ajouter une note
+                        </label>
+                        <textarea class="form-control form-control-sm mb-2"
+                                  rows="2"
+                                  placeholder="Écris une note..."
+                                  @bind="newNoteTexts[fav.Id]"
+                                  @bind:event="oninput"></textarea>
+                        <button class="btn btn-primary btn-sm w-100"
+                                @onclick="() => AddNote(fav)"
+                                disabled="@(string.IsNullOrWhiteSpace(newNoteTexts.GetValueOrDefault(fav.Id)))">
+                            + Ajouter la note
                         </button>
                     </div>
+
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@* MODAL *@
+@if (showModal)
+{
+    <div style="position:fixed; top:0; left:0; width:100%; height:100%;
+        background:rgba(0,0,0,0.6); z-index:1040;"
+         @onclick="CloseModal">
+    </div>
+
+    <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+        width:min(700px, 95vw); max-height:90vh; overflow-y:auto;
+        background:white; border-radius:12px; z-index:1050;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);"
+         @onclick:stopPropagation="true">
+
+        @if (modalLoading)
+        {
+            <div class="p-5 text-center">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-3 text-muted">Chargement des détails...</p>
+            </div>
+        }
+        else if (modalSpecies is not null)
+        {
+            @if (!string.IsNullOrWhiteSpace(modalSpecies.PhotoUrl))
+            {
+                <img src="@modalSpecies.PhotoUrl"
+                     style="width:100%; height:280px; object-fit:cover; border-radius:12px 12px 0 0;" />
+            }
+
+            <div class="p-4">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h4 class="mb-1">@(modalSpecies.CommonName ?? modalSpecies.ScientificName)</h4>
+                        <p class="text-muted fst-italic mb-0">@modalSpecies.ScientificName</p>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm ms-3" @onclick="CloseModal">
+                        ✕ Fermer
+                    </button>
+                </div>
+
+                @if (modalTaxonomy is not null && modalTaxonomy.Any())
+                {
+                    <h6 class="mt-3 mb-2">🌿 Classification</h6>
+                    <table class="table table-sm table-bordered">
+                        <tbody>
+                            @foreach (var t in modalTaxonomy)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold" style="width:40%">@TranslateRank(t.Rank)</td>
+                                    <td>@(t.CommonName ?? t.ScientificName)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                <div class="d-flex gap-2 mt-3 flex-wrap">
+                    @if (!string.IsNullOrWhiteSpace(modalSpecies.WikipediaUrl))
+                    {
+                        <a href="@modalSpecies.WikipediaUrl" target="_blank" class="btn btn-outline-secondary btn-sm">
+                            📚 Wikipedia →
+                        </a>
+                    }
+                    <span class="badge bg-success align-self-center px-3 py-2">⭐ Déjà en favoris</span>
                 </div>
             </div>
         }
@@ -56,12 +170,19 @@ else
 
 @code {
     private List<FavoriteSpecies>? favorites;
+    private Dictionary<int, string> newNoteTexts = new();
+
+    private bool showModal = false;
+    private bool modalLoading = false;
+    private SpeciesBE.Models.SpeciesDetailsModel? modalSpecies;
+    private List<SpeciesBE.Models.TaxonOption>? modalTaxonomy;
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
             favorites = await FavoriteService.GetFavorites();
+            InitNoteTexts();
         }
         catch (Exception ex)
         {
@@ -70,16 +191,85 @@ else
         }
     }
 
-    private async Task Save(FavoriteSpecies fav)
+    private void InitNoteTexts()
     {
+        if (favorites is null) return;
+        foreach (var fav in favorites)
+            if (!newNoteTexts.ContainsKey(fav.Id))
+                newNoteTexts[fav.Id] = "";
+    }
+
+    private async Task OpenModal(int taxonId)
+    {
+        showModal = true;
+        modalLoading = true;
+        modalSpecies = null;
+        modalTaxonomy = null;
+        StateHasChanged();
+
+        try
+        {
+            modalSpecies = await SpeciesApiService.GetTaxonDetails(taxonId, locale: "fr");
+            modalTaxonomy = await SpeciesApiService.GetTaxonomy(taxonId, locale: "fr");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Modal error: {ex.Message}");
+        }
+        finally
+        {
+            modalLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        modalSpecies = null;
+        modalTaxonomy = null;
+    }
+
+    private async Task AddNote(FavoriteSpecies fav)
+    {
+        var text = newNoteTexts.GetValueOrDefault(fav.Id)?.Trim();
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        var note = new SpeciesNote
+        {
+            Id = fav.Notes.Any() ? fav.Notes.Max(n => n.Id) + 1 : 1,
+            Text = text,
+            DateAdded = DateTime.Now
+        };
+
+        fav.Notes.Add(note);
+        newNoteTexts[fav.Id] = "";
+
         try
         {
             await FavoriteService.UpdateFavorite(fav);
             favorites = await FavoriteService.GetFavorites();
+            InitNoteTexts();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Save error: {ex.Message}");
+            Console.WriteLine($"AddNote error: {ex.Message}");
+        }
+    }
+
+    private async Task RemoveNote(FavoriteSpecies fav, int noteId)
+    {
+        fav.Notes.RemoveAll(n => n.Id == noteId);
+
+        try
+        {
+            await FavoriteService.UpdateFavorite(fav);
+            favorites = await FavoriteService.GetFavorites();
+            InitNoteTexts();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"RemoveNote error: {ex.Message}");
         }
     }
 
@@ -89,10 +279,24 @@ else
         {
             await FavoriteService.RemoveFavorite(id);
             favorites = await FavoriteService.GetFavorites();
+            newNoteTexts.Remove(id);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Remove error: {ex.Message}");
         }
     }
+
+    private static string TranslateRank(string? rank) => rank switch
+    {
+        "kingdom" => "Règne",
+        "phylum" => "Embranchement",
+        "class" => "Classe",
+        "order" => "Ordre",
+        "family" => "Famille",
+        "genus" => "Genre",
+        "species" => "Espèce",
+        "subspecies" => "Sous-espèce",
+        _ => rank ?? ""
+    };
 }

@@ -140,7 +140,7 @@ else
                 Id = (favoritesCache.Any() ? favoritesCache.Max(f => f.Id) : 0) + 1,
                 SpeciesKey = details.Id,
                 ScientificName = details.ScientificName,
-                Notes = ""
+                // Notes = ""
             };
             await FavoriteService.AddFavorite(fav);
         }

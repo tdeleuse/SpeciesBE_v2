@@ -473,7 +473,7 @@ else if (hasSearched && !isLoading)
             Id = GenerateId(),
             SpeciesKey = modalSpecies.Id,
             ScientificName = modalSpecies.ScientificName,
-            Notes = ""
+            //Notes = ""
         };
 
         await FavoriteService.AddFavorite(fav);
@@ -657,7 +657,7 @@ else if (hasSearched && !isLoading)
             Id = GenerateId(),
             SpeciesKey = s.Id,
             ScientificName = s.ScientificName,
-            Notes = ""
+            //Notes = ""
         };
 
         await FavoriteService.AddFavorite(fav);
