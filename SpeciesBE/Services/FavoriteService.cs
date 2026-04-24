@@ -19,46 +19,76 @@ public class FavoriteService
 
     public async Task<List<FavoriteSpecies>> GetFavorites()
     {
-        var json = await _js.InvokeAsync<string>("localStorage.getItem", StorageKey);
-
-        if (string.IsNullOrEmpty(json))
+        try
+        {
+            // InvokeAsync<string?> pour accepter null sans planter
+            var json = await _js.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+            if (string.IsNullOrEmpty(json))
+                return new List<FavoriteSpecies>();
+            return JsonSerializer.Deserialize<List<FavoriteSpecies>>(json) ?? new List<FavoriteSpecies>();
+        }
+        catch
+        {
             return new List<FavoriteSpecies>();
-
-        return JsonSerializer.Deserialize<List<FavoriteSpecies>>(json) ?? new List<FavoriteSpecies>();
+        }
     }
 
     public async Task AddFavorite(FavoriteSpecies species)
     {
-        var favorites = await GetFavorites();
-
-        if (favorites.Any(f => f.SpeciesKey == species.SpeciesKey))
-            return;
-
-        favorites.Add(species);
-        await SaveAll(favorites);
+        try
+        {
+            var favorites = await GetFavorites();
+            if (favorites.Any(f => f.SpeciesKey == species.SpeciesKey))
+                return;
+            favorites.Add(species);
+            await SaveAll(favorites);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AddFavorite error: {ex.Message}");
+        }
     }
 
     public async Task RemoveFavorite(int id)
     {
-        var favorites = await GetFavorites();
-        favorites.RemoveAll(f => f.Id == id);
-        await SaveAll(favorites);
+        try
+        {
+            var favorites = await GetFavorites();
+            favorites.RemoveAll(f => f.Id == id);
+            await SaveAll(favorites);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"RemoveFavorite error: {ex.Message}");
+        }
     }
 
     public async Task UpdateFavorite(FavoriteSpecies updated)
     {
-        var favorites = await GetFavorites();
-        var index = favorites.FindIndex(f => f.Id == updated.Id);
-
-        if (index >= 0)
-            favorites[index] = updated;
-
-        await SaveAll(favorites);
+        try
+        {
+            var favorites = await GetFavorites();
+            var index = favorites.FindIndex(f => f.Id == updated.Id);
+            if (index >= 0)
+                favorites[index] = updated;
+            await SaveAll(favorites);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"UpdateFavorite error: {ex.Message}");
+        }
     }
 
     private async Task SaveAll(List<FavoriteSpecies> favorites)
     {
-        var json = JsonSerializer.Serialize(favorites);
-        await _js.InvokeVoidAsync("localStorage.setItem", StorageKey, json);
+        try
+        {
+            var json = JsonSerializer.Serialize(favorites);
+            await _js.InvokeVoidAsync("localStorage.setItem", StorageKey, json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SaveAll error: {ex.Message}");
+        }
     }
 }

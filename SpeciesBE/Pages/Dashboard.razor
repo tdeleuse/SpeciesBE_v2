@@ -1,0 +1,65 @@
+﻿@page "/dashboard"
+@inject AuthService AuthService
+@inject NavigationManager Nav
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+    <div>
+        <h2 style="font-family:'Playfair Display',serif; color:var(--green-dark);">
+            🌿 Species
+        </h2>
+        @if (AuthService.IsAuthenticated)
+        {
+            <span class="text-muted small">Connecté en tant que <strong>@AuthService.Username</strong></span>
+        }
+        else
+        {
+            <span class="text-muted small">Mode invité — <a href="/login">Se connecter</a> pour sauvegarder des favoris</span>
+        }
+    </div>
+
+    @if (AuthService.IsAuthenticated)
+    {
+        <button class="btn btn-outline-secondary btn-sm" @onclick="DoLogout">
+            Déconnexion
+        </button>
+    }
+</div>
+
+<div class="dashboard-tabs mb-4">
+    <ul class="nav nav-tabs">
+        <li class="nav-item">
+            <button class="nav-link @(activeTab == "search" ? "active" : "")"
+                    @onclick='() => activeTab = "search"'>
+                🔍 Recherche
+            </button>
+        </li>
+        @if (AuthService.IsAuthenticated)
+        {
+            <li class="nav-item">
+                <button class="nav-link @(activeTab == "favorites" ? "active" : "")"
+                        @onclick='() => activeTab = "favorites"'>
+                    ⭐ Mes favoris
+                </button>
+            </li>
+        }
+    </ul>
+</div>
+
+@if (activeTab == "search")
+{
+    <SpeciesSearch />
+}
+else if (activeTab == "favorites")
+{
+    <FavoritesList />
+}
+
+@code {
+    private string activeTab = "search";
+
+    private async Task DoLogout()
+    {
+        await AuthService.LogoutAsync();
+        Nav.NavigateTo("/login");
+    }
+}

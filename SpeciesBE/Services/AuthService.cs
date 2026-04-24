@@ -18,21 +18,42 @@ public class AuthService
 
     public async Task InitializeAsync()
     {
-        var json = await _js.InvokeAsync<string>("localStorage.getItem", StorageKey);
-        if (!string.IsNullOrWhiteSpace(json))
-            Username = JsonSerializer.Deserialize<string>(json);
+        try
+        {
+            var json = await _js.InvokeAsync<string?>("localStorage.getItem", StorageKey);
+            if (!string.IsNullOrWhiteSpace(json))
+                Username = JsonSerializer.Deserialize<string>(json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"AuthService init error: {ex.Message}");
+        }
     }
 
     public async Task LoginAsync(string username)
     {
-        Username = username.Trim();
-        var json = JsonSerializer.Serialize(Username);
-        await _js.InvokeVoidAsync("localStorage.setItem", StorageKey, json);
+        try
+        {
+            Username = username.Trim();
+            var json = JsonSerializer.Serialize(Username);
+            await _js.InvokeVoidAsync("localStorage.setItem", StorageKey, json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"LoginAsync error: {ex.Message}");
+        }
     }
 
     public async Task LogoutAsync()
     {
-        Username = null;
-        await _js.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+        try
+        {
+            Username = null;
+            await _js.InvokeVoidAsync("localStorage.removeItem", StorageKey);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"LogoutAsync error: {ex.Message}");
+        }
     }
 }

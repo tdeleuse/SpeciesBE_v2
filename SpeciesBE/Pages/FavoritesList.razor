@@ -1,0 +1,98 @@
+﻿@inject FavoriteService FavoriteService
+@inject AuthService AuthService
+
+@if (!AuthService.IsAuthenticated)
+{
+    <div class="text-center py-5">
+        <div style="font-size:3rem;">🔐</div>
+        <h5 class="mt-3" style="color:var(--green-dark);">Connexion requise</h5>
+        <p class="text-muted">Tu dois être connecté pour voir et gérer tes favoris.</p>
+        <a href="/login" class="btn btn-primary px-4">Se connecter</a>
+    </div>
+    return;
+}
+
+@if (favorites is null)
+{
+    <div class="alert alert-info">Chargement de tes favoris...</div>
+}
+else if (!favorites.Any())
+{
+    <div class="text-center py-5">
+        <div style="font-size:3rem;">🌱</div>
+        <h5 class="mt-3" style="color:var(--green-dark);">Aucun favori pour l'instant</h5>
+        <p class="text-muted">Recherche des espèces et ajoute-les à ta collection !</p>
+    </div>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var fav in favorites)
+        {
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card p-3 h-100">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h6 class="mb-0 fw-bold" style="color:var(--green-dark);">@fav.ScientificName</h6>
+                            <small class="text-muted">Ajouté le @fav.DateAdded.ToShortDateString()</small>
+                        </div>
+                        <span style="font-size:1.5rem;">🌿</span>
+                    </div>
+                    <label class="form-label fw-bold small" style="color:var(--green-main);">Notes personnelles</label>
+                    <input class="form-control form-control-sm" @bind="fav.Notes" placeholder="Ajoute une note..." />
+                    <div class="d-flex gap-2 mt-3">
+                        <button class="btn btn-primary btn-sm flex-grow-1" @onclick="() => Save(fav)">
+                            Enregistrer
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" @onclick="() => Remove(fav.Id)">
+                            🗑
+                        </button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<FavoriteSpecies>? favorites;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            favorites = await FavoriteService.GetFavorites();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"FavoritesList init error: {ex.Message}");
+            favorites = new List<FavoriteSpecies>();
+        }
+    }
+
+    private async Task Save(FavoriteSpecies fav)
+    {
+        try
+        {
+            await FavoriteService.UpdateFavorite(fav);
+            favorites = await FavoriteService.GetFavorites();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Save error: {ex.Message}");
+        }
+    }
+
+    private async Task Remove(int id)
+    {
+        try
+        {
+            await FavoriteService.RemoveFavorite(id);
+            favorites = await FavoriteService.GetFavorites();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Remove error: {ex.Message}");
+        }
+    }
+}

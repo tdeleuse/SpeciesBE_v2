@@ -1,5 +1,4 @@
-﻿@page "/species"
-@inject SpeciesApiService SpeciesApiService
+﻿@inject SpeciesApiService SpeciesApiService
 @inject FavoriteService FavoriteService
 @inject AuthService AuthService
 @inject NavigationManager Nav
@@ -84,10 +83,11 @@ else
 
         <div class="row g-2">
 
-            @* RÈGNE *@
+            @* RÈGNE — toujours actif *@
             <div class="col-md-4">
                 <label class="form-label fw-bold">Règne</label>
-                <select class="form-select" value="@selectedKingdomId" @onchange="OnKingdomChanged">
+                <select class="form-select" value="@selectedKingdomId" @onchange="OnKingdomChanged"
+                        disabled="@taxonomyLoading">
                     <option value="">-- Choisir --</option>
                     @foreach (var k in kingdoms)
                     {
@@ -96,11 +96,11 @@ else
                 </select>
             </div>
 
-            @* EMBRANCHEMENT *@
+            @* EMBRANCHEMENT — actif seulement si règne sélectionné *@
             <div class="col-md-4">
                 <label class="form-label fw-bold">Embranchement</label>
                 <select class="form-select" value="@selectedPhylumId" @onchange="OnPhylumChanged"
-                        disabled="@taxonomyLoading">
+                        disabled="@(selectedKingdomId is null || taxonomyLoading)">
                     <option value="">-- Choisir --</option>
                     @foreach (var p in DisplayedPhyla)
                     {
@@ -109,11 +109,11 @@ else
                 </select>
             </div>
 
-            @* CLASSE *@
+            @* CLASSE — actif seulement si embranchement sélectionné *@
             <div class="col-md-4">
                 <label class="form-label fw-bold">Classe</label>
                 <select class="form-select" value="@selectedClassId" @onchange="OnClassChanged"
-                        disabled="@taxonomyLoading">
+                        disabled="@(selectedPhylumId is null || taxonomyLoading)">
                     <option value="">-- Choisir --</option>
                     @foreach (var c in DisplayedClasses)
                     {
@@ -122,11 +122,11 @@ else
                 </select>
             </div>
 
-            @* ORDRE *@
+            @* ORDRE — actif seulement si classe sélectionnée *@
             <div class="col-md-4">
                 <label class="form-label fw-bold">Ordre</label>
                 <select class="form-select" value="@selectedOrderId" @onchange="OnOrderChanged"
-                        disabled="@taxonomyLoading">
+                        disabled="@(selectedClassId is null || taxonomyLoading)">
                     <option value="">-- Choisir --</option>
                     @foreach (var o in DisplayedOrders)
                     {
@@ -135,11 +135,11 @@ else
                 </select>
             </div>
 
-            @* FAMILLE — chargée à la demande depuis l'API *@
+            @* FAMILLE — actif seulement si ordre sélectionné *@
             <div class="col-md-4">
                 <label class="form-label fw-bold">Famille</label>
                 <select class="form-select" value="@selectedFamilyId" @onchange="OnFamilyChanged"
-                        disabled="@(families.Count == 0 || taxonomyLoading)">
+                        disabled="@(selectedOrderId is null || families.Count == 0 || taxonomyLoading)">
                     <option value="">-- Choisir --</option>
                     @foreach (var f in families)
                     {
@@ -148,11 +148,11 @@ else
                 </select>
             </div>
 
-            @* GENRE — chargé à la demande depuis l'API *@
+            @* GENRE — actif seulement si famille sélectionnée *@
             <div class="col-md-4">
                 <label class="form-label fw-bold">Genre</label>
                 <select class="form-select" value="@selectedGenusId" @onchange="OnGenusChanged"
-                        disabled="@(genera.Count == 0 || taxonomyLoading)">
+                        disabled="@(selectedFamilyId is null || genera.Count == 0 || taxonomyLoading)">
                     <option value="">-- Choisir --</option>
                     @foreach (var g in genera)
                     {
@@ -162,7 +162,6 @@ else
             </div>
         </div>
 
-        @* BREADCRUMB *@
         @if (selectedKingdomId is not null)
         {
             <div class="mt-3 p-2 bg-light rounded small">
@@ -209,7 +208,7 @@ else
         </div>
 
         <div class="mt-2 small text-muted">
-            Tu peux sélectionner n'importe quel niveau directement — les niveaux supérieurs se rempliront automatiquement.
+            Sélectionne un niveau pour débloquer le suivant.
         </div>
     </div>
 }
@@ -224,7 +223,6 @@ else
     <div class="alert alert-info">Chargement...</div>
 }
 
-@* RESULTATS *@
 @if (results is not null && results.Any())
 {
     <div class="row g-3">
@@ -271,7 +269,7 @@ else if (hasSearched && !isLoading)
     <div class="alert alert-secondary">Aucun résultat.</div>
 }
 
-@* ===================== MODAL ===================== *@
+@* MODAL *@
 @if (showModal)
 {
     <div style="position:fixed; top:0; left:0; width:100%; height:100%;
@@ -358,13 +356,10 @@ else if (hasSearched && !isLoading)
 
     private bool taxonomyMode = false;
 
-    // Règne, embranchement, classe, ordre : préchargés au démarrage du mode
     private List<TaxonOption> kingdoms = new();
     private List<TaxonOption> phyla = new();
     private List<TaxonOption> classes = new();
     private List<TaxonOption> orders = new();
-
-    // Famille et genre : chargés à la demande depuis l'API selon l'ordre/famille sélectionné
     private List<TaxonOption> families = new();
     private List<TaxonOption> genera = new();
 
@@ -375,7 +370,6 @@ else if (hasSearched && !isLoading)
     private int? selectedFamilyId;
     private int? selectedGenusId;
 
-    // Modal
     private bool showModal = false;
     private bool modalLoading = false;
     private SpeciesBE.Models.SpeciesDetailsModel? modalSpecies;
@@ -385,29 +379,34 @@ else if (hasSearched && !isLoading)
         selectedGenusId ?? selectedFamilyId ?? selectedOrderId ??
         selectedClassId ?? selectedPhylumId ?? selectedKingdomId;
 
-    // Dropdowns filtrés selon le niveau supérieur sélectionné
     private List<TaxonOption> DisplayedPhyla =>
-        selectedKingdomId is null ? phyla :
+        selectedKingdomId is null ? new() :
         phyla.Where(p => p.AncestorIds.Contains(selectedKingdomId.Value)).ToList();
 
     private List<TaxonOption> DisplayedClasses =>
-        selectedPhylumId is null ? classes :
+        selectedPhylumId is null ? new() :
         classes.Where(c => c.AncestorIds.Contains(selectedPhylumId.Value)).ToList();
 
     private List<TaxonOption> DisplayedOrders =>
-        selectedClassId is null ? orders :
+        selectedClassId is null ? new() :
         orders.Where(o => o.AncestorIds.Contains(selectedClassId.Value)).ToList();
 
     protected override async Task OnInitializedAsync()
     {
-        favoritesCache = await FavoriteService.GetFavorites();
-        kingdoms = await SpeciesApiService.GetTaxa(rank: "kingdom", perPage: 200);
+        try
+        {
+            favoritesCache = await FavoriteService.GetFavorites();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Init error: {ex.Message}");
+        }
     }
 
     private async Task OnTaxonomyModeChanged(ChangeEventArgs e)
     {
         taxonomyMode = (bool)(e.Value ?? false);
-        if (taxonomyMode && phyla.Count == 0)
+        if (taxonomyMode && kingdoms.Count == 0)
             await PreloadAllTaxa();
     }
 
@@ -416,13 +415,22 @@ else if (hasSearched && !isLoading)
         taxonomyLoading = true;
         StateHasChanged();
 
-        // Précharge seulement jusqu'à l'ordre — famille et genre se chargent à la demande
-        phyla = await SpeciesApiService.GetTaxa(rank: "phylum", perPage: 200);
-        classes = await SpeciesApiService.GetTaxa(rank: "class", perPage: 200);
-        orders = await SpeciesApiService.GetTaxa(rank: "order", perPage: 200);
-
-        taxonomyLoading = false;
-        StateHasChanged();
+        try
+        {
+            kingdoms = await SpeciesApiService.GetTaxa(rank: "kingdom", perPage: 200);
+            phyla = await SpeciesApiService.GetTaxa(rank: "phylum", perPage: 200);
+            classes = await SpeciesApiService.GetTaxa(rank: "class", perPage: 200);
+            orders = await SpeciesApiService.GetTaxa(rank: "order", perPage: 200);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Taxonomy preload error: {ex.Message}");
+        }
+        finally
+        {
+            taxonomyLoading = false;
+            StateHasChanged();
+        }
     }
 
     private async Task OpenModal(int taxonId)
@@ -433,11 +441,20 @@ else if (hasSearched && !isLoading)
         modalTaxonomy = null;
         StateHasChanged();
 
-        modalSpecies = await SpeciesApiService.GetTaxonDetails(taxonId, locale: "fr");
-        modalTaxonomy = await SpeciesApiService.GetTaxonomy(taxonId, locale: "fr");
-
-        modalLoading = false;
-        StateHasChanged();
+        try
+        {
+            modalSpecies = await SpeciesApiService.GetTaxonDetails(taxonId, locale: "fr");
+            modalTaxonomy = await SpeciesApiService.GetTaxonomy(taxonId, locale: "fr");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Modal error: {ex.Message}");
+        }
+        finally
+        {
+            modalLoading = false;
+            StateHasChanged();
+        }
     }
 
     private void CloseModal()
@@ -545,14 +562,6 @@ else if (hasSearched && !isLoading)
         families = new();
         genera = new();
         ClearResults();
-
-        if (selectedPhylumId is null) return;
-        var phylum = phyla.FirstOrDefault(p => p.Id == selectedPhylumId);
-        if (phylum is not null)
-        {
-            var kingdom = kingdoms.FirstOrDefault(k => phylum.AncestorIds.Contains(k.Id));
-            if (kingdom is not null) selectedKingdomId = kingdom.Id;
-        }
     }
 
     private void OnClassChanged(ChangeEventArgs e)
@@ -562,16 +571,6 @@ else if (hasSearched && !isLoading)
         families = new();
         genera = new();
         ClearResults();
-
-        if (selectedClassId is null) return;
-        var cls = classes.FirstOrDefault(c => c.Id == selectedClassId);
-        if (cls is not null)
-        {
-            var kingdom = kingdoms.FirstOrDefault(k => cls.AncestorIds.Contains(k.Id));
-            if (kingdom is not null) selectedKingdomId = kingdom.Id;
-            var phylum = phyla.FirstOrDefault(p => cls.AncestorIds.Contains(p.Id));
-            if (phylum is not null) selectedPhylumId = phylum.Id;
-        }
     }
 
     private async Task OnOrderChanged(ChangeEventArgs e)
@@ -581,26 +580,10 @@ else if (hasSearched && !isLoading)
         genera = new();
         ClearResults();
 
-        if (selectedOrderId is null)
-        {
-            families = new();
-            return;
-        }
+        if (selectedOrderId is null) { families = new(); return; }
 
-        // Remonte les ancêtres
-        var order = orders.FirstOrDefault(o => o.Id == selectedOrderId);
-        if (order is not null)
-        {
-            var kingdom = kingdoms.FirstOrDefault(k => order.AncestorIds.Contains(k.Id));
-            if (kingdom is not null) selectedKingdomId = kingdom.Id;
-            var phylum = phyla.FirstOrDefault(p => order.AncestorIds.Contains(p.Id));
-            if (phylum is not null) selectedPhylumId = phylum.Id;
-            var cls = classes.FirstOrDefault(c => order.AncestorIds.Contains(c.Id));
-            if (cls is not null) selectedClassId = cls.Id;
-        }
-
-        // Charge TOUTES les familles de cet ordre via l'API
-        families = await SpeciesApiService.GetTaxa(rank: "family", parentId: selectedOrderId, perPage: 500);
+        try { families = await SpeciesApiService.GetTaxa(rank: "family", parentId: selectedOrderId, perPage: 500); }
+        catch { families = new(); }
     }
 
     private async Task OnFamilyChanged(ChangeEventArgs e)
@@ -609,28 +592,10 @@ else if (hasSearched && !isLoading)
         selectedGenusId = null;
         ClearResults();
 
-        if (selectedFamilyId is null)
-        {
-            genera = new();
-            return;
-        }
+        if (selectedFamilyId is null) { genera = new(); return; }
 
-        // Remonte les ancêtres
-        var family = families.FirstOrDefault(f => f.Id == selectedFamilyId);
-        if (family is not null)
-        {
-            var kingdom = kingdoms.FirstOrDefault(k => family.AncestorIds.Contains(k.Id));
-            if (kingdom is not null) selectedKingdomId = kingdom.Id;
-            var phylum = phyla.FirstOrDefault(p => family.AncestorIds.Contains(p.Id));
-            if (phylum is not null) selectedPhylumId = phylum.Id;
-            var cls = classes.FirstOrDefault(c => family.AncestorIds.Contains(c.Id));
-            if (cls is not null) selectedClassId = cls.Id;
-            var order = orders.FirstOrDefault(o => family.AncestorIds.Contains(o.Id));
-            if (order is not null) selectedOrderId = order.Id;
-        }
-
-        // Charge TOUS les genres de cette famille via l'API
-        genera = await SpeciesApiService.GetTaxa(rank: "genus", parentId: selectedFamilyId, perPage: 500);
+        try { genera = await SpeciesApiService.GetTaxa(rank: "genus", parentId: selectedFamilyId, perPage: 500); }
+        catch { genera = new(); }
     }
 
     private async Task OnGenusChanged(ChangeEventArgs e)
@@ -639,21 +604,6 @@ else if (hasSearched && !isLoading)
         ClearResults();
 
         if (selectedGenusId is null) return;
-
-        var genus = genera.FirstOrDefault(g => g.Id == selectedGenusId);
-        if (genus is not null)
-        {
-            var kingdom = kingdoms.FirstOrDefault(k => genus.AncestorIds.Contains(k.Id));
-            if (kingdom is not null) selectedKingdomId = kingdom.Id;
-            var phylum = phyla.FirstOrDefault(p => genus.AncestorIds.Contains(p.Id));
-            if (phylum is not null) selectedPhylumId = phylum.Id;
-            var cls = classes.FirstOrDefault(c => genus.AncestorIds.Contains(c.Id));
-            if (cls is not null) selectedClassId = cls.Id;
-            var order = orders.FirstOrDefault(o => genus.AncestorIds.Contains(o.Id));
-            if (order is not null) selectedOrderId = order.Id;
-            var family = families.FirstOrDefault(f => genus.AncestorIds.Contains(f.Id));
-            if (family is not null) selectedFamilyId = family.Id;
-        }
 
         await LoadSpeciesAt(selectedGenusId.Value);
     }

@@ -1,6 +1,9 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+﻿@inject AuthService AuthService
+@inject NavigationManager Nav
+
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">SpeciesBE</a>
+        <a class="navbar-brand" href="">🌿 SpeciesBE</a>
         <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
             <span class="navbar-toggler-icon"></span>
         </button>
@@ -9,29 +12,46 @@
 
 <div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
     <nav class="nav flex-column">
-        
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
 
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="favorites">
-                <span class="bi bi-star-fill-nav-menu" aria-hidden="true"></span> Mes favoris
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
+                🏠 Accueil
             </NavLink>
         </div>
 
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="species">
-                <span class="bi bi-search-nav-menu" aria-hidden="true"></span> Rechercher espèces
+                🔍 Rechercher espèces
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="login">
-                <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> Connexion
-            </NavLink>
+        @* Favoris uniquement si connecté *@
+        @if (AuthService.IsAuthenticated)
+        {
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="favorites">
+                    ⭐ Mes favoris
+                </NavLink>
+            </div>
+        }
+
+        <div class="nav-item px-3 mt-3" style="border-top: 1px solid rgba(255,255,255,0.2); padding-top: 1rem;">
+            @if (AuthService.IsAuthenticated)
+            {
+                <span class="nav-link text-white-50 small">
+                    👤 @AuthService.Username
+                </span>
+                <button class="btn btn-outline-light btn-sm w-100 mt-1"
+                        @onclick="DoLogout">
+                    Déconnexion
+                </button>
+            }
+            else
+            {
+                <NavLink class="nav-link" href="login">
+                    🔐 Connexion
+                </NavLink>
+            }
         </div>
 
     </nav>
@@ -39,17 +59,16 @@
 
 @code {
     private bool collapseNavMenu = true;
-
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
 
     private void ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
     }
+
+    private async Task DoLogout()
+    {
+        await AuthService.LogoutAsync();
+        Nav.NavigateTo("/");
+    }
 }
-
-
-
-
-
-
