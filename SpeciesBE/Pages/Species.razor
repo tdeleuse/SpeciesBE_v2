@@ -2,23 +2,26 @@
 @inject SpeciesApiService SpeciesApiService
 @inject FavoriteService FavoriteService
 @inject AuthService AuthService
+@inject NavigationManager Nav
 
 <h3>Recherche d'espèces (iNaturalist)</h3>
 
 <div class="form-check form-switch mb-3">
-    <input class="form-check-input" type="checkbox" role="switch" @bind="taxonomyMode" />
+    <input class="form-check-input" type="checkbox" role="switch"
+           checked="@taxonomyMode"
+           @onchange="OnTaxonomyModeChanged" />
     <label class="form-check-label">Mode exploration taxonomique</label>
 </div>
 
 @if (!taxonomyMode)
 {
-    <!-- MODE 1 : Recherche texte -->
     <div class="card p-3 mb-3">
         <div class="row g-2 align-items-center">
             <div class="col-md-8">
                 <input class="form-control"
                        @bind="query"
                        @bind:event="oninput"
+                       @onkeydown="OnKeyDown"
                        placeholder="Ex: renard, rouge-gorge, quercus..." />
             </div>
             <div class="col-md-4 d-flex gap-2">
@@ -30,89 +33,183 @@
                 </button>
             </div>
         </div>
+
+        <div class="d-flex gap-2 flex-wrap mt-3">
+            <button class="btn btn-sm @(selectedIconic == "" ? "btn-dark" : "btn-outline-dark")"
+                    @onclick='() => SelectGroup("")'>
+                🌍 Tous
+            </button>
+            <button class="btn btn-sm @(selectedIconic == "Mammalia" ? "btn-primary" : "btn-outline-primary")"
+                    @onclick='() => SelectGroup("Mammalia")'>
+                🐾 Mammifères
+            </button>
+            <button class="btn btn-sm @(selectedIconic == "Aves" ? "btn-info" : "btn-outline-info")"
+                    @onclick='() => SelectGroup("Aves")'>
+                🐦 Oiseaux
+            </button>
+            <button class="btn btn-sm @(selectedIconic == "Reptilia" ? "btn-warning" : "btn-outline-warning")"
+                    @onclick='() => SelectGroup("Reptilia")'>
+                🦎 Reptiles
+            </button>
+            <button class="btn btn-sm @(selectedIconic == "Amphibia" ? "btn-success" : "btn-outline-success")"
+                    @onclick='() => SelectGroup("Amphibia")'>
+                🐸 Amphibiens
+            </button>
+            <button class="btn btn-sm @(selectedIconic == "Actinopterygii" ? "btn-secondary" : "btn-outline-secondary")"
+                    @onclick='() => SelectGroup("Actinopterygii")'>
+                🐟 Poissons
+            </button>
+            <button class="btn btn-sm @(selectedIconic == "Insecta" ? "btn-danger" : "btn-outline-danger")"
+                    @onclick='() => SelectGroup("Insecta")'>
+                🐛 Insectes
+            </button>
+            <button class="btn btn-sm @(selectedIconic == "Plantae" ? "btn-success" : "btn-outline-success")"
+                    @onclick='() => SelectGroup("Plantae")'>
+                🌿 Plantes
+            </button>
+            <button class="btn btn-sm @(selectedIconic == "Fungi" ? "btn-warning" : "btn-outline-warning")"
+                    @onclick='() => SelectGroup("Fungi")'>
+                🍄 Champignons
+            </button>
+        </div>
     </div>
 }
 else
 {
-    <!-- MODE 2 : Exploration taxonomique -->
     <div class="card p-3 mb-3">
+        @if (taxonomyLoading)
+        {
+            <div class="alert alert-info">Chargement de l'arbre taxonomique...</div>
+        }
+
         <div class="row g-2">
 
+            @* RÈGNE *@
             <div class="col-md-4">
-                <label class="form-label">Règne</label>
-                <select class="form-select" @onchange="OnKingdomChanged">
+                <label class="form-label fw-bold">Règne</label>
+                <select class="form-select" value="@selectedKingdomId" @onchange="OnKingdomChanged">
                     <option value="">-- Choisir --</option>
                     @foreach (var k in kingdoms)
                     {
-                        <option value="@k.Id">@Display(k)</option>
+                        <option value="@k.Id">@DisplayFr(k)</option>
                     }
                 </select>
             </div>
 
+            @* EMBRANCHEMENT *@
             <div class="col-md-4">
-                <label class="form-label">Embranchement</label>
-                <select class="form-select" @onchange="OnPhylumChanged" disabled="@(phyla.Count == 0)">
+                <label class="form-label fw-bold">Embranchement</label>
+                <select class="form-select" value="@selectedPhylumId" @onchange="OnPhylumChanged"
+                        disabled="@taxonomyLoading">
                     <option value="">-- Choisir --</option>
-                    @foreach (var p in phyla)
+                    @foreach (var p in DisplayedPhyla)
                     {
-                        <option value="@p.Id">@Display(p)</option>
+                        <option value="@p.Id">@DisplayFr(p)</option>
                     }
                 </select>
             </div>
 
+            @* CLASSE *@
             <div class="col-md-4">
-                <label class="form-label">Classe</label>
-                <select class="form-select" @onchange="OnClassChanged" disabled="@(classes.Count == 0)">
+                <label class="form-label fw-bold">Classe</label>
+                <select class="form-select" value="@selectedClassId" @onchange="OnClassChanged"
+                        disabled="@taxonomyLoading">
                     <option value="">-- Choisir --</option>
-                    @foreach (var c in classes)
+                    @foreach (var c in DisplayedClasses)
                     {
-                        <option value="@c.Id">@Display(c)</option>
+                        <option value="@c.Id">@DisplayFr(c)</option>
                     }
                 </select>
             </div>
 
+            @* ORDRE *@
             <div class="col-md-4">
-                <label class="form-label">Ordre</label>
-                <select class="form-select" @onchange="OnOrderChanged" disabled="@(orders.Count == 0)">
+                <label class="form-label fw-bold">Ordre</label>
+                <select class="form-select" value="@selectedOrderId" @onchange="OnOrderChanged"
+                        disabled="@taxonomyLoading">
                     <option value="">-- Choisir --</option>
-                    @foreach (var o in orders)
+                    @foreach (var o in DisplayedOrders)
                     {
-                        <option value="@o.Id">@Display(o)</option>
+                        <option value="@o.Id">@DisplayFr(o)</option>
                     }
                 </select>
             </div>
 
+            @* FAMILLE — chargée à la demande depuis l'API *@
             <div class="col-md-4">
-                <label class="form-label">Famille</label>
-                <select class="form-select" @onchange="OnFamilyChanged" disabled="@(families.Count == 0)">
+                <label class="form-label fw-bold">Famille</label>
+                <select class="form-select" value="@selectedFamilyId" @onchange="OnFamilyChanged"
+                        disabled="@(families.Count == 0 || taxonomyLoading)">
                     <option value="">-- Choisir --</option>
                     @foreach (var f in families)
                     {
-                        <option value="@f.Id">@Display(f)</option>
+                        <option value="@f.Id">@DisplayFr(f)</option>
                     }
                 </select>
             </div>
 
+            @* GENRE — chargé à la demande depuis l'API *@
             <div class="col-md-4">
-                <label class="form-label">Genre</label>
-                <select class="form-select" @onchange="OnGenusChanged" disabled="@(genera.Count == 0)">
+                <label class="form-label fw-bold">Genre</label>
+                <select class="form-select" value="@selectedGenusId" @onchange="OnGenusChanged"
+                        disabled="@(genera.Count == 0 || taxonomyLoading)">
                     <option value="">-- Choisir --</option>
                     @foreach (var g in genera)
                     {
-                        <option value="@g.Id">@Display(g)</option>
+                        <option value="@g.Id">@DisplayFr(g)</option>
                     }
                 </select>
             </div>
         </div>
 
+        @* BREADCRUMB *@
+        @if (selectedKingdomId is not null)
+        {
+            <div class="mt-3 p-2 bg-light rounded small">
+                <strong>📍 Navigation : </strong>
+                <span class="badge bg-secondary me-1">@DisplayFr(kingdoms.FirstOrDefault(k => k.Id == selectedKingdomId))</span>
+                @if (selectedPhylumId is not null)
+                {
+                    <span class="me-1">›</span>
+                    <span class="badge bg-secondary me-1">@DisplayFr(phyla.FirstOrDefault(p => p.Id == selectedPhylumId))</span>
+                }
+                @if (selectedClassId is not null)
+                {
+                    <span class="me-1">›</span>
+                    <span class="badge bg-secondary me-1">@DisplayFr(classes.FirstOrDefault(c => c.Id == selectedClassId))</span>
+                }
+                @if (selectedOrderId is not null)
+                {
+                    <span class="me-1">›</span>
+                    <span class="badge bg-secondary me-1">@DisplayFr(orders.FirstOrDefault(o => o.Id == selectedOrderId))</span>
+                }
+                @if (selectedFamilyId is not null)
+                {
+                    <span class="me-1">›</span>
+                    <span class="badge bg-secondary me-1">@DisplayFr(families.FirstOrDefault(f => f.Id == selectedFamilyId))</span>
+                }
+                @if (selectedGenusId is not null)
+                {
+                    <span class="me-1">›</span>
+                    <span class="badge bg-primary me-1">@DisplayFr(genera.FirstOrDefault(g => g.Id == selectedGenusId))</span>
+                }
+            </div>
+        }
+
         <div class="mt-3 d-flex gap-2">
+            @if (CurrentSelectedId is not null)
+            {
+                <button class="btn btn-primary" @onclick="() => LoadSpeciesAt(CurrentSelectedId.Value)" disabled="@isLoading">
+                    🔍 Voir les espèces
+                </button>
+            }
             <button class="btn btn-outline-secondary" @onclick="ClearTaxonomy" disabled="@isLoading">
                 Réinitialiser l'arbre
             </button>
         </div>
 
         <div class="mt-2 small text-muted">
-            Dès que tu sélectionnes un <strong>genre</strong>, la liste d’espèces (avec photos) se charge automatiquement.
+            Tu peux sélectionner n'importe quel niveau directement — les niveaux supérieurs se rempliront automatiquement.
         </div>
     </div>
 }
@@ -127,13 +224,17 @@ else
     <div class="alert alert-info">Chargement...</div>
 }
 
+@* RESULTATS *@
 @if (results is not null && results.Any())
 {
     <div class="row g-3">
         @foreach (var s in results)
         {
             <div class="col-12 col-sm-6 col-lg-4 col-xl-3">
-                <div class="card h-100 shadow-sm">
+                <div class="card h-100 shadow-sm"
+                     style="cursor:pointer;"
+                     @onclick="() => OpenModal(s.Id)">
+
                     @if (!string.IsNullOrWhiteSpace(s.PhotoUrl))
                     {
                         <img src="@s.PhotoUrl" class="card-img-top" style="object-fit:cover; height:180px;" />
@@ -147,17 +248,13 @@ else
 
                     <div class="card-body">
                         <div class="small text-muted">@s.Rank</div>
-
                         <h6 class="card-title mb-1">
                             @(string.IsNullOrWhiteSpace(s.CommonName) ? s.ScientificName : s.CommonName)
                         </h6>
-
-                        <div class="text-muted small">
-                            <em>@s.ScientificName</em>
-                        </div>
-
-                        <div class="mt-3 d-flex gap-2">
+                        <div class="text-muted small"><em>@s.ScientificName</em></div>
+                        <div class="mt-3">
                             <button class="btn btn-warning btn-sm"
+                                    @onclick:stopPropagation="true"
                                     @onclick="() => AddToFavorites(s)"
                                     disabled="@(!AuthService.IsAuthenticated || IsAlreadyFavorite(s.Id))">
                                 @(!AuthService.IsAuthenticated ? "Connecte-toi ⭐" : IsAlreadyFavorite(s.Id) ? "Déjà ⭐" : "Favori ⭐")
@@ -174,23 +271,100 @@ else if (hasSearched && !isLoading)
     <div class="alert alert-secondary">Aucun résultat.</div>
 }
 
+@* ===================== MODAL ===================== *@
+@if (showModal)
+{
+    <div style="position:fixed; top:0; left:0; width:100%; height:100%;
+        background:rgba(0,0,0,0.6); z-index:1040;"
+         @onclick="CloseModal">
+    </div>
+
+    <div style="position:fixed; top:50%; left:50%; transform:translate(-50%,-50%);
+        width:min(700px, 95vw); max-height:90vh; overflow-y:auto;
+        background:white; border-radius:12px; z-index:1050;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);"
+         @onclick:stopPropagation="true">
+
+        @if (modalLoading)
+        {
+            <div class="p-5 text-center">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-3 text-muted">Chargement des détails...</p>
+            </div>
+        }
+        else if (modalSpecies is not null)
+        {
+            @if (!string.IsNullOrWhiteSpace(modalSpecies.PhotoUrl))
+            {
+                <img src="@modalSpecies.PhotoUrl"
+                     style="width:100%; height:280px; object-fit:cover; border-radius:12px 12px 0 0;" />
+            }
+
+            <div class="p-4">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <div>
+                        <h4 class="mb-1">@(modalSpecies.CommonName ?? modalSpecies.ScientificName)</h4>
+                        <p class="text-muted fst-italic mb-0">@modalSpecies.ScientificName</p>
+                    </div>
+                    <button class="btn btn-outline-secondary btn-sm ms-3" @onclick="CloseModal">
+                        ✕ Fermer
+                    </button>
+                </div>
+
+                @if (modalTaxonomy is not null && modalTaxonomy.Any())
+                {
+                    <h6 class="mt-3 mb-2">🌿 Classification</h6>
+                    <table class="table table-sm table-bordered">
+                        <tbody>
+                            @foreach (var t in modalTaxonomy)
+                            {
+                                <tr>
+                                    <td class="text-muted fw-bold" style="width:40%">@TranslateRank(t.Rank)</td>
+                                    <td>@(t.CommonName ?? t.ScientificName)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                <div class="d-flex gap-2 mt-3 flex-wrap">
+                    @if (!string.IsNullOrWhiteSpace(modalSpecies.WikipediaUrl))
+                    {
+                        <a href="@modalSpecies.WikipediaUrl" target="_blank" class="btn btn-outline-secondary btn-sm">
+                            📚 Wikipedia →
+                        </a>
+                    }
+                    <button class="btn btn-warning btn-sm"
+                            @onclick="AddToFavoritesFromModal"
+                            disabled="@(!AuthService.IsAuthenticated || IsAlreadyFavorite(modalSpecies.Id))">
+                        @(!AuthService.IsAuthenticated ? "Connecte-toi ⭐" : IsAlreadyFavorite(modalSpecies.Id) ? "Déjà en favoris ⭐" : "Ajouter aux favoris ⭐")
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
 @code {
-    // --- Recherche / affichage ---
     private string query = "";
     private bool isLoading;
+    private bool taxonomyLoading;
     private bool hasSearched;
     private string? error;
+    private string selectedIconic = "";
 
     private List<SpeciesBE.Models.Species>? results;
     private List<SpeciesBE.Models.FavoriteSpecies> favoritesCache = new();
 
-    // --- Mode taxonomie ---
     private bool taxonomyMode = false;
 
+    // Règne, embranchement, classe, ordre : préchargés au démarrage du mode
     private List<TaxonOption> kingdoms = new();
     private List<TaxonOption> phyla = new();
     private List<TaxonOption> classes = new();
     private List<TaxonOption> orders = new();
+
+    // Famille et genre : chargés à la demande depuis l'API selon l'ordre/famille sélectionné
     private List<TaxonOption> families = new();
     private List<TaxonOption> genera = new();
 
@@ -201,21 +375,130 @@ else if (hasSearched && !isLoading)
     private int? selectedFamilyId;
     private int? selectedGenusId;
 
+    // Modal
+    private bool showModal = false;
+    private bool modalLoading = false;
+    private SpeciesBE.Models.SpeciesDetailsModel? modalSpecies;
+    private List<SpeciesBE.Models.TaxonOption>? modalTaxonomy;
+
+    private int? CurrentSelectedId =>
+        selectedGenusId ?? selectedFamilyId ?? selectedOrderId ??
+        selectedClassId ?? selectedPhylumId ?? selectedKingdomId;
+
+    // Dropdowns filtrés selon le niveau supérieur sélectionné
+    private List<TaxonOption> DisplayedPhyla =>
+        selectedKingdomId is null ? phyla :
+        phyla.Where(p => p.AncestorIds.Contains(selectedKingdomId.Value)).ToList();
+
+    private List<TaxonOption> DisplayedClasses =>
+        selectedPhylumId is null ? classes :
+        classes.Where(c => c.AncestorIds.Contains(selectedPhylumId.Value)).ToList();
+
+    private List<TaxonOption> DisplayedOrders =>
+        selectedClassId is null ? orders :
+        orders.Where(o => o.AncestorIds.Contains(selectedClassId.Value)).ToList();
+
     protected override async Task OnInitializedAsync()
     {
         favoritesCache = await FavoriteService.GetFavorites();
         kingdoms = await SpeciesApiService.GetTaxa(rank: "kingdom", perPage: 200);
     }
 
-    private string Display(TaxonOption t)
-        => !string.IsNullOrWhiteSpace(t.CommonName)
-            ? $"{t.CommonName} — {t.ScientificName}"
+    private async Task OnTaxonomyModeChanged(ChangeEventArgs e)
+    {
+        taxonomyMode = (bool)(e.Value ?? false);
+        if (taxonomyMode && phyla.Count == 0)
+            await PreloadAllTaxa();
+    }
+
+    private async Task PreloadAllTaxa()
+    {
+        taxonomyLoading = true;
+        StateHasChanged();
+
+        // Précharge seulement jusqu'à l'ordre — famille et genre se chargent à la demande
+        phyla = await SpeciesApiService.GetTaxa(rank: "phylum", perPage: 200);
+        classes = await SpeciesApiService.GetTaxa(rank: "class", perPage: 200);
+        orders = await SpeciesApiService.GetTaxa(rank: "order", perPage: 200);
+
+        taxonomyLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task OpenModal(int taxonId)
+    {
+        showModal = true;
+        modalLoading = true;
+        modalSpecies = null;
+        modalTaxonomy = null;
+        StateHasChanged();
+
+        modalSpecies = await SpeciesApiService.GetTaxonDetails(taxonId, locale: "fr");
+        modalTaxonomy = await SpeciesApiService.GetTaxonomy(taxonId, locale: "fr");
+
+        modalLoading = false;
+        StateHasChanged();
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        modalSpecies = null;
+        modalTaxonomy = null;
+    }
+
+    private async Task AddToFavoritesFromModal()
+    {
+        if (modalSpecies is null || !AuthService.IsAuthenticated) return;
+
+        var fav = new SpeciesBE.Models.FavoriteSpecies
+        {
+            Id = GenerateId(),
+            SpeciesKey = modalSpecies.Id,
+            ScientificName = modalSpecies.ScientificName,
+            Notes = ""
+        };
+
+        await FavoriteService.AddFavorite(fav);
+        favoritesCache = await FavoriteService.GetFavorites();
+    }
+
+    private static string TranslateRank(string? rank) => rank switch
+    {
+        "kingdom" => "Règne",
+        "phylum" => "Embranchement",
+        "class" => "Classe",
+        "order" => "Ordre",
+        "family" => "Famille",
+        "genus" => "Genre",
+        "species" => "Espèce",
+        "subspecies" => "Sous-espèce",
+        _ => rank ?? ""
+    };
+
+    private string DisplayFr(TaxonOption? t)
+    {
+        if (t is null) return "";
+        return !string.IsNullOrWhiteSpace(t.CommonName)
+            ? t.CommonName
             : (t.ScientificName ?? $"#{t.Id}");
+    }
 
     private int? TryParseId(object? value)
         => int.TryParse(value?.ToString(), out var id) ? id : null;
 
-    // --- Recherche texte ---
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await SearchText();
+    }
+
+    private async Task SelectGroup(string group)
+    {
+        selectedIconic = group;
+        if (!string.IsNullOrWhiteSpace(query))
+            await SearchText();
+    }
+
     private async Task SearchText()
     {
         error = null;
@@ -224,7 +507,7 @@ else if (hasSearched && !isLoading)
 
         try
         {
-            results = await SpeciesApiService.SearchSpecies(query, limit: 24);
+            results = await SpeciesApiService.SearchSpecies(query, limit: 24, iconicTaxa: selectedIconic);
             favoritesCache = await FavoriteService.GetFavorites();
         }
         catch (Exception ex)
@@ -243,57 +526,111 @@ else if (hasSearched && !isLoading)
         results = null;
         hasSearched = false;
         error = null;
+        selectedIconic = "";
     }
 
-    // --- Cascade + auto-load species quand genus est choisi ---
-    private async Task OnKingdomChanged(ChangeEventArgs e)
+    private void OnKingdomChanged(ChangeEventArgs e)
     {
         selectedKingdomId = TryParseId(e.Value);
-        ResetBelow("kingdom");
+        selectedPhylumId = selectedClassId = selectedOrderId = selectedFamilyId = selectedGenusId = null;
+        families = new();
+        genera = new();
         ClearResults();
-
-        if (selectedKingdomId is null) return;
-        phyla = await SpeciesApiService.GetTaxa(rank: "phylum", parentId: selectedKingdomId);
     }
 
-    private async Task OnPhylumChanged(ChangeEventArgs e)
+    private void OnPhylumChanged(ChangeEventArgs e)
     {
         selectedPhylumId = TryParseId(e.Value);
-        ResetBelow("phylum");
+        selectedClassId = selectedOrderId = selectedFamilyId = selectedGenusId = null;
+        families = new();
+        genera = new();
         ClearResults();
 
         if (selectedPhylumId is null) return;
-        classes = await SpeciesApiService.GetTaxa(rank: "class", parentId: selectedPhylumId);
+        var phylum = phyla.FirstOrDefault(p => p.Id == selectedPhylumId);
+        if (phylum is not null)
+        {
+            var kingdom = kingdoms.FirstOrDefault(k => phylum.AncestorIds.Contains(k.Id));
+            if (kingdom is not null) selectedKingdomId = kingdom.Id;
+        }
     }
 
-    private async Task OnClassChanged(ChangeEventArgs e)
+    private void OnClassChanged(ChangeEventArgs e)
     {
         selectedClassId = TryParseId(e.Value);
-        ResetBelow("class");
+        selectedOrderId = selectedFamilyId = selectedGenusId = null;
+        families = new();
+        genera = new();
         ClearResults();
 
         if (selectedClassId is null) return;
-        orders = await SpeciesApiService.GetTaxa(rank: "order", parentId: selectedClassId);
+        var cls = classes.FirstOrDefault(c => c.Id == selectedClassId);
+        if (cls is not null)
+        {
+            var kingdom = kingdoms.FirstOrDefault(k => cls.AncestorIds.Contains(k.Id));
+            if (kingdom is not null) selectedKingdomId = kingdom.Id;
+            var phylum = phyla.FirstOrDefault(p => cls.AncestorIds.Contains(p.Id));
+            if (phylum is not null) selectedPhylumId = phylum.Id;
+        }
     }
 
     private async Task OnOrderChanged(ChangeEventArgs e)
     {
         selectedOrderId = TryParseId(e.Value);
-        ResetBelow("order");
+        selectedFamilyId = selectedGenusId = null;
+        genera = new();
         ClearResults();
 
-        if (selectedOrderId is null) return;
-        families = await SpeciesApiService.GetTaxa(rank: "family", parentId: selectedOrderId);
+        if (selectedOrderId is null)
+        {
+            families = new();
+            return;
+        }
+
+        // Remonte les ancêtres
+        var order = orders.FirstOrDefault(o => o.Id == selectedOrderId);
+        if (order is not null)
+        {
+            var kingdom = kingdoms.FirstOrDefault(k => order.AncestorIds.Contains(k.Id));
+            if (kingdom is not null) selectedKingdomId = kingdom.Id;
+            var phylum = phyla.FirstOrDefault(p => order.AncestorIds.Contains(p.Id));
+            if (phylum is not null) selectedPhylumId = phylum.Id;
+            var cls = classes.FirstOrDefault(c => order.AncestorIds.Contains(c.Id));
+            if (cls is not null) selectedClassId = cls.Id;
+        }
+
+        // Charge TOUTES les familles de cet ordre via l'API
+        families = await SpeciesApiService.GetTaxa(rank: "family", parentId: selectedOrderId, perPage: 500);
     }
 
     private async Task OnFamilyChanged(ChangeEventArgs e)
     {
         selectedFamilyId = TryParseId(e.Value);
-        ResetBelow("family");
+        selectedGenusId = null;
         ClearResults();
 
-        if (selectedFamilyId is null) return;
-        genera = await SpeciesApiService.GetTaxa(rank: "genus", parentId: selectedFamilyId);
+        if (selectedFamilyId is null)
+        {
+            genera = new();
+            return;
+        }
+
+        // Remonte les ancêtres
+        var family = families.FirstOrDefault(f => f.Id == selectedFamilyId);
+        if (family is not null)
+        {
+            var kingdom = kingdoms.FirstOrDefault(k => family.AncestorIds.Contains(k.Id));
+            if (kingdom is not null) selectedKingdomId = kingdom.Id;
+            var phylum = phyla.FirstOrDefault(p => family.AncestorIds.Contains(p.Id));
+            if (phylum is not null) selectedPhylumId = phylum.Id;
+            var cls = classes.FirstOrDefault(c => family.AncestorIds.Contains(c.Id));
+            if (cls is not null) selectedClassId = cls.Id;
+            var order = orders.FirstOrDefault(o => family.AncestorIds.Contains(o.Id));
+            if (order is not null) selectedOrderId = order.Id;
+        }
+
+        // Charge TOUS les genres de cette famille via l'API
+        genera = await SpeciesApiService.GetTaxa(rank: "genus", parentId: selectedFamilyId, perPage: 500);
     }
 
     private async Task OnGenusChanged(ChangeEventArgs e)
@@ -303,19 +640,34 @@ else if (hasSearched && !isLoading)
 
         if (selectedGenusId is null) return;
 
-        // Auto charger les espèces sous le genre choisi
-        await LoadSpeciesUnderGenus(selectedGenusId.Value);
+        var genus = genera.FirstOrDefault(g => g.Id == selectedGenusId);
+        if (genus is not null)
+        {
+            var kingdom = kingdoms.FirstOrDefault(k => genus.AncestorIds.Contains(k.Id));
+            if (kingdom is not null) selectedKingdomId = kingdom.Id;
+            var phylum = phyla.FirstOrDefault(p => genus.AncestorIds.Contains(p.Id));
+            if (phylum is not null) selectedPhylumId = phylum.Id;
+            var cls = classes.FirstOrDefault(c => genus.AncestorIds.Contains(c.Id));
+            if (cls is not null) selectedClassId = cls.Id;
+            var order = orders.FirstOrDefault(o => genus.AncestorIds.Contains(o.Id));
+            if (order is not null) selectedOrderId = order.Id;
+            var family = families.FirstOrDefault(f => genus.AncestorIds.Contains(f.Id));
+            if (family is not null) selectedFamilyId = family.Id;
+        }
+
+        await LoadSpeciesAt(selectedGenusId.Value);
     }
 
-    private async Task LoadSpeciesUnderGenus(int genusId)
+    private async Task LoadSpeciesAt(int taxonId)
     {
         error = null;
         isLoading = true;
         hasSearched = true;
+        results = null;
 
         try
         {
-            results = await SpeciesApiService.GetSpeciesByParent(genusId, limit: 24);
+            results = await SpeciesApiService.GetSpeciesUnderTaxon(taxonId, limit: 24);
             favoritesCache = await FavoriteService.GetFavorites();
         }
         catch (Exception ex)
@@ -338,47 +690,17 @@ else if (hasSearched && !isLoading)
     private void ClearTaxonomy()
     {
         selectedKingdomId = selectedPhylumId = selectedClassId = selectedOrderId = selectedFamilyId = selectedGenusId = null;
-        phyla.Clear(); classes.Clear(); orders.Clear(); families.Clear(); genera.Clear();
+        families = new();
+        genera = new();
         ClearResults();
     }
 
-    private void ResetBelow(string level)
-    {
-        if (level == "kingdom")
-        {
-            selectedPhylumId = selectedClassId = selectedOrderId = selectedFamilyId = selectedGenusId = null;
-            phyla.Clear(); classes.Clear(); orders.Clear(); families.Clear(); genera.Clear();
-        }
-        else if (level == "phylum")
-        {
-            selectedClassId = selectedOrderId = selectedFamilyId = selectedGenusId = null;
-            classes.Clear(); orders.Clear(); families.Clear(); genera.Clear();
-        }
-        else if (level == "class")
-        {
-            selectedOrderId = selectedFamilyId = selectedGenusId = null;
-            orders.Clear(); families.Clear(); genera.Clear();
-        }
-        else if (level == "order")
-        {
-            selectedFamilyId = selectedGenusId = null;
-            families.Clear(); genera.Clear();
-        }
-        else if (level == "family")
-        {
-            selectedGenusId = null;
-            genera.Clear();
-        }
-    }
-
-    // --- Favoris ---
     private bool IsAlreadyFavorite(int taxonId)
         => favoritesCache.Any(f => f.SpeciesKey == taxonId);
 
     private async Task AddToFavorites(SpeciesBE.Models.Species s)
     {
-        if (!AuthService.IsAuthenticated || IsAlreadyFavorite(s.Id))
-            return;
+        if (!AuthService.IsAuthenticated || IsAlreadyFavorite(s.Id)) return;
 
         var fav = new SpeciesBE.Models.FavoriteSpecies
         {

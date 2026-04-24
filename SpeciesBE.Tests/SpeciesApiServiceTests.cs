@@ -1,10 +1,29 @@
+using Xunit;
+using SpeciesBE.Services;
+
 namespace SpeciesBE.Tests;
 
-[TestClass]
-public class Test1
+public class SpeciesApiServiceTests
 {
-    [TestMethod]
-    public void TestMethod1()
+    [Fact]
+    public async Task SearchSpecies_QueryVide_RetourneListeVide()
     {
+        var http = new HttpClient();
+        var service = new SpeciesApiService(http);
+
+        var result = await service.SearchSpecies("");
+
+        Assert.Empty(result);
+    }
+
+    [Fact]
+    public async Task GetSpeciesByParent_IdInvalide_NeCrashPas()
+    {
+        var http = new HttpClient();
+        var service = new SpeciesApiService(http);
+
+        var result = await service.GetSpeciesByParent(-1);
+
+        Assert.NotNull(result);
     }
 }

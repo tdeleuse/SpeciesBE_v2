@@ -1,46 +1,109 @@
 ﻿@page "/taxon/{TaxonId:int}"
 @inject SpeciesApiService Api
-
-<h3>Détails</h3>
+@inject FavoriteService FavoriteService
+@inject AuthService AuthService
+@inject NavigationManager Nav
 
 @if (details is null)
 {
-    <p>Chargement...</p>
+    <div class="alert alert-info mt-4">Chargement des détails...</div>
 }
 else
 {
-    <div class="card p-3">
-        <h5>@(details.CommonName ?? details.ScientificName)</h5>
-        <div class="text-muted"><em>@details.ScientificName</em></div>
+    <div class="container mt-4">
 
-        @if (!string.IsNullOrWhiteSpace(details.PhotoUrl))
-        {
-            <img src="@details.PhotoUrl" style="max-width:420px; object-fit:cover;" class="mt-3" />
-        }
+        @* ENTÊTE *@
+        <div class="row mb-4">
+            <div class="col-md-5">
+                @if (!string.IsNullOrWhiteSpace(details.PhotoUrl))
+                {
+                    <img src="@details.PhotoUrl"
+                         class="img-fluid rounded shadow"
+                         style="width:100%; max-height:400px; object-fit:cover;" />
+                }
+                else
+                {
+                    <div class="d-flex align-items-center justify-content-center bg-light rounded"
+                         style="height:300px;">
+                        <span class="text-muted">Pas de photo disponible</span>
+                    </div>
+                }
+            </div>
 
-        @if (!string.IsNullOrWhiteSpace(details.WikipediaSummary))
-        {
-            <h6 class="mt-4">Description</h6>
-            <p>@details.WikipediaSummary</p>
-        }
+            <div class="col-md-7">
+                <h2>@(details.CommonName ?? details.ScientificName)</h2>
+                <p class="text-muted fst-italic fs-5">@details.ScientificName</p>
 
-        @if (!string.IsNullOrWhiteSpace(details.WikipediaUrl))
-        {
-            <p class="small">
-                Source : <a href="@details.WikipediaUrl" target="_blank">Wikipedia</a>
-            </p>
-        }
+                @* BADGE RANG *@
+                <span class="badge bg-secondary mb-3">@details.Rank</span>
 
+                @* BOUTON FAVORI *@
+                <div class="mb-3">
+                    <button class="btn btn-warning"
+                            @onclick="ToggleFavorite"
+                            disabled="@(!AuthService.IsAuthenticated)">
+                        @if (!AuthService.IsAuthenticated)
+                        {
+                            <span>Connecte-toi pour ajouter ⭐</span>
+                        }
+                        else if (isFavorite)
+                        {
+                            <span>Retirer des favoris ⭐</span>
+                        }
+                        else
+                        {
+                            <span>Ajouter aux favoris ⭐</span>
+                        }
+                    </button>
+                </div>
+
+                @* WIKIPEDIA *@
+                @if (!string.IsNullOrWhiteSpace(details.WikipediaSummary))
+                {
+                    <h5 class="mt-3">📖 Description</h5>
+                    <p>@details.WikipediaSummary</p>
+                }
+
+                @if (!string.IsNullOrWhiteSpace(details.WikipediaUrl))
+                {
+                    <a href="@details.WikipediaUrl" target="_blank" class="btn btn-outline-secondary btn-sm">
+                        Lire sur Wikipédia →
+                    </a>
+                }
+            </div>
+        </div>
+
+        @* TAXONOMIE *@
         @if (taxonomy is not null && taxonomy.Any())
         {
-            <h6 class="mt-4">Taxonomie</h6>
-            <ul>
-                @foreach (var t in taxonomy)
-                {
-                    <li><strong>@t.Rank</strong> : @(t.CommonName ?? t.ScientificName)</li>
-                }
-            </ul>
+            <div class="card p-3 mb-4">
+                <h5>🌿 Classification taxonomique</h5>
+                <div class="d-flex flex-wrap gap-2 mt-2">
+                    @foreach (var t in taxonomy)
+                    {
+                        <div class="text-center">
+                            <div class="small text-muted">@TranslateRank(t.Rank)</div>
+                            <span class="badge bg-light text-dark border">
+                                @(t.CommonName ?? t.ScientificName)
+                            </span>
+                        </div>
+                        <div class="d-flex align-items-center text-muted">›</div>
+                    }
+                    @* L'espèce elle-même à la fin *@
+                    <div class="text-center">
+                        <div class="small text-muted">@TranslateRank(details.Rank)</div>
+                        <span class="badge bg-primary">
+                            @(details.CommonName ?? details.ScientificName)
+                        </span>
+                    </div>
+                </div>
+            </div>
         }
+
+        @* BOUTON RETOUR *@
+        <button class="btn btn-outline-secondary" @onclick="GoBack">
+            ← Retour à la recherche
+        </button>
     </div>
 }
 
@@ -49,10 +112,56 @@ else
 
     private SpeciesBE.Models.SpeciesDetailsModel? details;
     private List<SpeciesBE.Models.TaxonOption>? taxonomy;
+    private bool isFavorite = false;
+    private List<SpeciesBE.Models.FavoriteSpecies> favoritesCache = new();
 
     protected override async Task OnInitializedAsync()
     {
         details = await Api.GetTaxonDetails(TaxonId, locale: "fr");
         taxonomy = await Api.GetTaxonomy(TaxonId, locale: "fr");
+        favoritesCache = await FavoriteService.GetFavorites();
+        isFavorite = favoritesCache.Any(f => f.SpeciesKey == TaxonId);
     }
+
+    private async Task ToggleFavorite()
+    {
+        if (!AuthService.IsAuthenticated || details is null) return;
+
+        if (isFavorite)
+        {
+            var fav = favoritesCache.FirstOrDefault(f => f.SpeciesKey == TaxonId);
+            if (fav is not null)
+                await FavoriteService.RemoveFavorite(fav.Id);
+        }
+        else
+        {
+            var fav = new SpeciesBE.Models.FavoriteSpecies
+            {
+                Id = (favoritesCache.Any() ? favoritesCache.Max(f => f.Id) : 0) + 1,
+                SpeciesKey = details.Id,
+                ScientificName = details.ScientificName,
+                Notes = ""
+            };
+            await FavoriteService.AddFavorite(fav);
+        }
+
+        favoritesCache = await FavoriteService.GetFavorites();
+        isFavorite = favoritesCache.Any(f => f.SpeciesKey == TaxonId);
+    }
+
+    private void GoBack() => Nav.NavigateTo("/species");
+
+    // Traduit les rangs taxonomiques en français
+    private static string TranslateRank(string? rank) => rank switch
+    {
+        "kingdom" => "Règne",
+        "phylum" => "Embranchement",
+        "class" => "Classe",
+        "order" => "Ordre",
+        "family" => "Famille",
+        "genus" => "Genre",
+        "species" => "Espèce",
+        "subspecies" => "Sous-espèce",
+        _ => rank ?? ""
+    };
 }

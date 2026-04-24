@@ -1,10 +1,32 @@
-﻿namespace SpeciesBE.Tests;
+﻿using Xunit;
+using SpeciesBE.Services;
 
-public class UnitTest1
+namespace SpeciesBE.Tests;
+
+public class AuthServiceTests
 {
     [Fact]
-    public void Test1()
+    public async Task Login_Definit_Username()
     {
+        var js = new FakeJsRuntime();
+        var auth = new AuthService(js);
 
+        await auth.LoginAsync("alice");
+
+        Assert.True(auth.IsAuthenticated);
+        Assert.Equal("alice", auth.Username);
+    }
+
+    [Fact]
+    public async Task Logout_Reset_Username()
+    {
+        var js = new FakeJsRuntime();
+        var auth = new AuthService(js);
+
+        await auth.LoginAsync("alice");
+        await auth.LogoutAsync();
+
+        Assert.False(auth.IsAuthenticated);
+        Assert.Null(auth.Username);
     }
 }

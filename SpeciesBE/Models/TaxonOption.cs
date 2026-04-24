@@ -6,8 +6,8 @@ public class TaxonOption
     public string? ScientificName { get; set; }
     public string? CommonName { get; set; }
     public string? Rank { get; set; }
-
     public int? ParentId { get; set; }
     public int? ObservationsCount { get; set; }
-    public string? PhotoUrl { get; set; } // mini optionnel
+    public string? PhotoUrl { get; set; }
+    public List<int> AncestorIds { get; set; } = new();
 }

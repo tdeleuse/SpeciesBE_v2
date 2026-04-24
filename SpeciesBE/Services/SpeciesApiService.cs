@@ -8,30 +8,57 @@ public class SpeciesApiService
 {
     private readonly HttpClient _http;
 
+    private static readonly Dictionary<string, string> IconicTaxaMap = new()
+    {
+        { "Mammalia",       "Mammalia" },
+        { "Aves",           "Aves" },
+        { "Reptilia",       "Reptilia" },
+        { "Amphibia",       "Amphibia" },
+        { "Actinopterygii", "Actinopterygii" },
+        { "Insecta",        "Insecta" },
+        { "Plantae",        "Plantae" },
+        { "Fungi",          "Fungi" },
+    };
+
     public SpeciesApiService(HttpClient http) => _http = http;
 
-    public async Task<List<Species>> SearchSpecies(string query, int limit = 24)
+    public async Task<List<Species>> SearchSpecies(string query, int limit = 24, string iconicTaxa = "")
     {
         if (string.IsNullOrWhiteSpace(query))
             return new List<Species>();
 
-        var url =
-            $"https://api.inaturalist.org/v1/taxa?q={Uri.EscapeDataString(query)}&per_page={limit}&order_by=observations_count";
+        var fetchLimit = string.IsNullOrWhiteSpace(iconicTaxa) ? limit : limit * 3;
+        var url = $"https://api.inaturalist.org/v1/taxa?q={Uri.EscapeDataString(query)}&per_page={fetchLimit}&order_by=observations_count&locale=fr";
 
         var resp = await _http.GetFromJsonAsync<INatTaxaResponse>(url);
-        return MapToSpecies(resp);
+        var species = MapToSpecies(resp);
+
+        if (!string.IsNullOrWhiteSpace(iconicTaxa) && IconicTaxaMap.TryGetValue(iconicTaxa, out var taxaName))
+        {
+            species = species
+                .Where(s => s.IconicTaxonName != null &&
+                            s.IconicTaxonName.Equals(taxaName, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        var q = query.Trim().ToLowerInvariant();
+        return species
+            .OrderByDescending(s =>
+                (s.CommonName?.ToLowerInvariant() == q || s.ScientificName?.ToLowerInvariant() == q) ? 2 :
+                (s.CommonName?.ToLowerInvariant().Contains(q) == true || s.ScientificName?.ToLowerInvariant().Contains(q) == true) ? 1 : 0)
+            .Take(limit)
+            .ToList();
     }
 
     public async Task<List<TaxonOption>> GetTaxa(string? rank = null, int? parentId = null, int perPage = 200)
     {
-        var url = $"https://api.inaturalist.org/v1/taxa?per_page={perPage}&order_by=observations_count";
+        var url = $"https://api.inaturalist.org/v1/taxa?per_page={perPage}&order_by=observations_count&locale=fr";
 
         if (!string.IsNullOrWhiteSpace(rank))
             url += $"&rank={Uri.EscapeDataString(rank)}";
 
         if (parentId is not null)
             url += $"&taxon_id={parentId.Value}";
-
 
         var resp = await _http.GetFromJsonAsync<INatTaxaResponse>(url);
 
@@ -43,15 +70,23 @@ public class SpeciesApiService
             Rank = t.Rank,
             ParentId = t.ParentId,
             ObservationsCount = t.ObservationsCount,
-            PhotoUrl = t.DefaultPhoto?.SquareUrl
-        }).ToList() ?? new List<TaxonOption>();
+            PhotoUrl = t.DefaultPhoto?.SquareUrl,
+            AncestorIds = t.AncestorIds ?? new List<int>()
+        })
+        .OrderBy(t => (t.CommonName ?? t.ScientificName ?? "").ToLowerInvariant())
+        .ToList() ?? new List<TaxonOption>();
+    }
+
+    public async Task<List<Species>> GetSpeciesUnderTaxon(int taxonId, int limit = 24)
+    {
+        var url = $"https://api.inaturalist.org/v1/taxa?taxon_id={taxonId}&rank=species&per_page={limit}&order_by=observations_count&locale=fr";
+        var resp = await _http.GetFromJsonAsync<INatTaxaResponse>(url);
+        return MapToSpecies(resp);
     }
 
     public async Task<List<Species>> GetSpeciesByParent(int parentId, int limit = 24)
     {
-        var url =
-            $"https://api.inaturalist.org/v1/taxa?parent_id={parentId}&rank=species&per_page={limit}&order_by=observations_count";
-
+        var url = $"https://api.inaturalist.org/v1/taxa?parent_id={parentId}&rank=species&per_page={limit}&order_by=observations_count&locale=fr";
         var resp = await _http.GetFromJsonAsync<INatTaxaResponse>(url);
         return MapToSpecies(resp);
     }
@@ -66,8 +101,80 @@ public class SpeciesApiService
             Rank = t.Rank,
             PhotoUrl = t.DefaultPhoto?.MediumUrl
                        ?? t.DefaultPhoto?.SquareUrl
-                       ?? t.DefaultPhoto?.OriginalUrl
+                       ?? t.DefaultPhoto?.OriginalUrl,
+            IconicTaxonName = t.IconicTaxonName
         }).ToList() ?? new List<Species>();
+    }
+
+    public async Task<SpeciesDetailsModel?> GetTaxonDetails(int taxonId, string locale = "fr")
+    {
+        var url = $"https://api.inaturalist.org/v1/taxa/{taxonId}?locale={Uri.EscapeDataString(locale)}";
+        var resp = await _http.GetFromJsonAsync<INatTaxaResponse>(url);
+
+        var t = resp?.Results?.FirstOrDefault();
+        if (t is null) return null;
+
+        return new SpeciesDetailsModel
+        {
+            Id = t.Id,
+            ScientificName = t.Name,
+            CommonName = t.PreferredCommonName,
+            Rank = t.Rank,
+            PhotoUrl = t.DefaultPhoto?.MediumUrl
+                       ?? t.DefaultPhoto?.SquareUrl
+                       ?? t.DefaultPhoto?.OriginalUrl,
+            WikipediaSummary = t.WikipediaSummary,
+            WikipediaUrl = t.WikipediaUrl,
+            AncestorIds = t.AncestorIds ?? new List<int>()
+        };
+    }
+
+    // Récupère la lignée directe de l'espèce en appelant chaque ancêtre individuellement
+    public async Task<List<TaxonOption>> GetTaxonomy(int taxonId, string locale = "fr")
+    {
+        // 1. Récupère les détails pour avoir les AncestorIds dans l'ordre
+        var details = await GetTaxonDetails(taxonId, locale);
+        if (details is null || details.AncestorIds.Count == 0)
+            return new List<TaxonOption>();
+
+        var wanted = new HashSet<string> { "kingdom", "phylum", "class", "order", "family", "genus" };
+
+        // 2. Appelle l'API avec les IDs des ancêtres — endpoint /taxa/{id} pour chacun des rangs voulus
+        //    On passe tous les IDs d'un coup via le paramètre id[] de l'endpoint
+        var ancestorIds = details.AncestorIds;
+
+        // Appel en lots de 30 IDs max pour éviter les URLs trop longues
+        var results = new List<TaxonOption>();
+        var batches = ancestorIds
+            .Select((id, i) => new { id, i })
+            .GroupBy(x => x.i / 30)
+            .Select(g => g.Select(x => x.id).ToList());
+
+        foreach (var batch in batches)
+        {
+            var ids = string.Join(",", batch);
+            var url = $"https://api.inaturalist.org/v1/taxa/{ids}?locale={Uri.EscapeDataString(locale)}";
+            var resp = await _http.GetFromJsonAsync<INatTaxaResponse>(url);
+
+            if (resp?.Results is null) continue;
+
+            var filtered = resp.Results
+                .Where(t => t.Rank != null && wanted.Contains(t.Rank))
+                .Select(t => new TaxonOption
+                {
+                    Id = t.Id,
+                    Rank = t.Rank,
+                    ScientificName = t.Name,
+                    CommonName = t.PreferredCommonName
+                });
+
+            results.AddRange(filtered);
+        }
+
+        // Trie dans l'ordre taxonomique correct
+        return results
+            .OrderBy(t => SortRank(t.Rank))
+            .ToList();
     }
 
     private sealed class INatTaxaResponse
@@ -108,6 +215,8 @@ public class SpeciesApiService
         [JsonPropertyName("ancestor_ids")]
         public List<int>? AncestorIds { get; set; }
 
+        [JsonPropertyName("iconic_taxon_name")]
+        public string? IconicTaxonName { get; set; }
     }
 
     private sealed class INatPhoto
@@ -122,77 +231,6 @@ public class SpeciesApiService
         public string? OriginalUrl { get; set; }
     }
 
-    public async Task<SpeciesDetailsModel?> GetTaxonDetails(int taxonId, string locale = "fr")
-    {
-        var url = $"https://api.inaturalist.org/v1/taxa/{taxonId}?locale={Uri.EscapeDataString(locale)}";
-        var resp = await _http.GetFromJsonAsync<INatTaxaResponse>(url);
-
-        var t = resp?.Results?.FirstOrDefault();
-        if (t is null) return null;
-
-        return new SpeciesDetailsModel
-        {
-            Id = t.Id,
-            ScientificName = t.Name,
-            CommonName = t.PreferredCommonName,
-            Rank = t.Rank,
-            PhotoUrl = t.DefaultPhoto?.MediumUrl
-                       ?? t.DefaultPhoto?.SquareUrl
-                       ?? t.DefaultPhoto?.OriginalUrl,
-            WikipediaSummary = t.WikipediaSummary,
-            WikipediaUrl = t.WikipediaUrl,
-            AncestorIds = t.AncestorIds ?? new List<int>()
-        };
-    }
-
-    // récupère les noms des ancêtres en 1 call (taxon_id=1,2,3...)
-    public async Task<List<(string Rank, string Name)>> GetTaxonomyLines(int taxonId, string locale = "fr")
-    {
-        var details = await GetTaxonDetails(taxonId, locale);
-        if (details is null || details.AncestorIds.Count == 0)
-            return new();
-
-        var idsCsv = string.Join(",", details.AncestorIds);
-        var url = $"https://api.inaturalist.org/v1/taxa?taxon_id={idsCsv}&locale={Uri.EscapeDataString(locale)}&per_page=200";
-        var resp = await _http.GetFromJsonAsync<INatTaxaResponse>(url);
-
-        // on garde seulement les rangs principaux
-        var wanted = new HashSet<string> { "kingdom", "phylum", "class", "order", "family", "genus", "species" };
-
-        return resp?.Results?
-            .Where(a => a.Rank != null && wanted.Contains(a.Rank))
-            .Select(a => (a.Rank!, a.PreferredCommonName ?? a.Name ?? $"#{a.Id}"))
-            .ToList()
-            ?? new();
-    }
-
-    public async Task<List<TaxonOption>> GetTaxonomy(int taxonId, string locale = "fr")
-    {
-        var details = await GetTaxonDetails(taxonId, locale);
-        if (details is null || details.AncestorIds.Count == 0)
-            return new List<TaxonOption>();
-
-        // On récupère tous les ancêtres, puis on filtre sur les rangs majeurs
-        var ids = string.Join(",", details.AncestorIds);
-        var url = $"https://api.inaturalist.org/v1/taxa?taxon_id={ids}&per_page=200&locale={Uri.EscapeDataString(locale)}";
-
-        var resp = await _http.GetFromJsonAsync<INatTaxaResponse>(url);
-
-        var wanted = new HashSet<string> { "kingdom", "phylum", "class", "order", "family", "genus" };
-
-        return resp?.Results?
-            .Where(t => t.Rank != null && wanted.Contains(t.Rank))
-            .Select(t => new TaxonOption
-            {
-                Id = t.Id,
-                Rank = t.Rank,
-                ScientificName = t.Name,
-                CommonName = t.PreferredCommonName
-            })
-            .OrderBy(t => SortRank(t.Rank)) // affichage dans l'ordre taxonomique
-            .ToList() ?? new List<TaxonOption>();
-    }
-
     private static int SortRank(string? rank) => rank switch
     {
         "kingdom" => 1,
@@ -203,5 +241,4 @@ public class SpeciesApiService
         "genus" => 6,
         _ => 99
     };
-
 }

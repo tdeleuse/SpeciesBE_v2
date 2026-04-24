@@ -2,9 +2,10 @@
 
 public class Species
 {
-    public int Id { get; set; }                 // iNaturalist taxon id
+    public int Id { get; set; }  // iNaturalist taxon id
     public string? ScientificName { get; set; }
     public string? CommonName { get; set; }
     public string? Rank { get; set; }
     public string? PhotoUrl { get; set; }
+    public string? IconicTaxonName { get; set; }  // ex: "Mammalia", "Aves", "Plantae"...
 }
